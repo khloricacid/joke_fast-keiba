@@ -56,7 +56,11 @@ body.shake2 .hud{animation:shake .45s linear 2}
 .tag{font-weight:900;font-size:11px;background:var(--pay);color:var(--ink);padding:1px 6px;white-space:nowrap}
 .meta{display:flex;align-items:center;gap:12px;margin-left:auto}
 .raceNo{font-family:var(--font-display);font-size:16px;line-height:1.1}
-.fever{font-family:var(--font-display);font-size:12px;background:var(--lamp);color:#fff;padding:2px 8px;border-radius:2px;animation:pulse .4s ease-in-out infinite alternate}
+.fever{white-space:nowrap;font-family:var(--font-display);font-size:12px;background:var(--lamp);color:#fff;padding:2px 8px;border-radius:2px;animation:pulse .4s ease-in-out infinite alternate}
+.rush{white-space:nowrap;font-family:var(--font-display);font-size:12px;color:#fff;padding:2px 8px;border-radius:2px;text-shadow:1px 1px 0 #000;
+  background:linear-gradient(90deg,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,#ff2d3d);background-size:200% 100%;animation:slide 1s linear infinite}
+body.is-rush #vig{opacity:1;box-shadow:inset 0 0 90px rgba(255,60,200,.55),inset 0 0 30px rgba(255,214,10,.5)}
+body.calm .rush{animation:none}
 .wallet{text-align:right;line-height:1.05}
 .wallet span{display:block;font-size:10px;font-weight:700;opacity:.85}
 .wallet b{font-family:var(--font-display);font-weight:400;font-size:clamp(22px,6vw,32px);color:var(--pay);font-variant-numeric:tabular-nums;display:inline-block}
@@ -729,6 +733,24 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 #legend.owner .lgWho .face::before{content:"";position:absolute;left:-14%;right:-14%;top:30%;height:12%;background:#1b1b1b}
 #legend.calm.owner .lgName,#legend.calm.owner .lgWho{animation:lgOwn var(--lgD,4.6s) steps(1,end) both}
 @keyframes lgOwn{0%,50%{opacity:0;transform:translateY(16px)}55%,86%{opacity:1;transform:none}91%,100%{opacity:0}}
+/* 馬主:暗闇にスポットライト、シルクハットの馬主が現れて白手袋の手を差し伸べる */
+#legend .ownerArt{display:none}
+#legend.owner .ownerArt{display:block;position:absolute;left:50%;top:44%;width:min(96vmin,620px);height:min(96vmin,620px);transform:translate(-50%,-58%);overflow:visible}
+#legend.owner .chars,#legend.owner .crack{display:none}
+#legend.owner .lgRays{background:repeating-conic-gradient(rgba(255,214,90,.5) 0 7deg,transparent 7deg 16deg)}
+#legend.owner .lgWho .face{display:none}
+#legend.owner .owSpot{opacity:0;animation:owSpot var(--lgD,4.6s) linear both}
+#legend.owner .owFig{opacity:0;transform-box:fill-box;transform-origin:50% 100%;animation:owFig var(--lgD,4.6s) cubic-bezier(.2,.8,.3,1) both}
+#legend.owner .owHand{opacity:0;animation:owHand var(--lgD,4.6s) cubic-bezier(.2,.8,.3,1) both}
+#legend.owner .owPalmGlow{transform-box:fill-box;transform-origin:50% 50%;animation:owGlow .5s ease-in-out infinite alternate}
+@keyframes owSpot{0%,28%{opacity:0}36%,84%{opacity:1}92%,100%{opacity:0}}
+@keyframes owFig{0%,33%{opacity:0;transform:translateY(30px) scale(.92);filter:brightness(.2)}40%{opacity:1;transform:none;filter:brightness(.45)}47%,84%{opacity:1;transform:none;filter:brightness(1)}92%,100%{opacity:0;transform:scale(1.04)}}
+@keyframes owHand{0%,44%{opacity:0;transform:translate(300px,318px) scale(.35) rotate(-18deg)}47%{opacity:1;transform:translate(298px,322px) scale(.45) rotate(-14deg)}56%{opacity:1;transform:translate(300px,368px) scale(1.3) rotate(-4deg)}60%,84%{opacity:1;transform:translate(300px,364px) scale(1.22) rotate(-5deg)}92%,100%{opacity:0;transform:translate(300px,370px) scale(1.6) rotate(-5deg)}}
+@keyframes owGlow{from{opacity:.55}to{opacity:1}}
+#legend.owner .lgWho{top:auto;bottom:calc(15% + clamp(40px,9vw,70px))}
+#legend.owner .lgName{top:auto;bottom:12%}
+#legend.calm.owner .owSpot,#legend.calm.owner .owFig,#legend.calm.owner .owHand{animation-timing-function:steps(1,end)}
+#legend.calm.owner .owPalmGlow{animation:none}
 /* 演出ひかえめ:暗転と文字だけ */
 #legend.calm .cross,#legend.calm .crack,#legend.calm .lgRays{display:none}
 #legend.calm .chars b{animation:lgChar var(--lgD,3.3s) steps(1,end) both;filter:none}
@@ -736,6 +758,7 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 #legend.calm .lgName{animation:lgName var(--lgD,3.3s) steps(1,end) both}
 @media (prefers-reduced-motion:reduce){
   body.crt-off #gl,body.crt-off #fx,body.crt-off .hud,body.crt-off #frame,body.crt-on #gl,body.crt-on #fx,body.crt-on .hud,body.crt-on #frame{animation:none}
+  #legend.owner .owPalmGlow{animation:none}
   #legend .lgRays{animation:lgRays 3.3s linear both}
   #legend .chars b,#legend .lgName{animation-iteration-count:1!important}
 }
@@ -746,4 +769,4 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 #demo button[data-k=owner]{background:linear-gradient(90deg,#e8b23a,#fff1c2)}
 #demo button[aria-pressed=true]{border-color:#fff;box-shadow:0 0 14px #fff}
 #demo small{flex-basis:100%;color:#ddd;text-align:center;font-size:12px}
-body.legend-bg #demo,body.is-run #demo{visibility:hidden}
+body.legend-bg #demo,body.is-run #demo,body.is-res #demo{visibility:hidden}

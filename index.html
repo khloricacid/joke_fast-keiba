@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body class="is-bet">
 <canvas id="gl" aria-hidden="true"></canvas>
@@ -20,7 +20,38 @@
 <div id="frame" aria-hidden="true"></div>
 <div id="flash" aria-hidden="true"></div>
 <div id="omen" aria-hidden="true"><small>確定演出</small><b>激アツ!!</b><i>この馬、くるぞ</i></div>
-<div id="legend" aria-hidden="true"><i class="cross"></i><i class="crack"></i><i class="lgRays"></i><div class="chars"><b>伝</b><b>説</b></div><div class="lgWho"><i class="face" id="lgFace"></i><span id="lgWho"></span></div><p class="lgName" id="lgName"></p></div>
+<div id="legend" aria-hidden="true"><i class="cross"></i><i class="crack"></i><i class="lgRays"></i><svg class="ownerArt" viewBox="0 0 400 400" aria-hidden="true">
+  <defs>
+    <radialGradient id="owSpot" cx="50%" cy="20%" r="65%"><stop offset="0" stop-color="#fff3c4" stop-opacity=".55"/><stop offset=".55" stop-color="#ffcf5a" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <radialGradient id="owGlow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".4" stop-color="#ffe39a" stop-opacity=".55"/><stop offset="1" stop-color="#ffb300" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path class="owSpot" d="M150 -10 L250 -10 L380 400 L20 400 Z" fill="url(#owSpot)"/>
+  <g class="owFig">
+    <path d="M70 400 C78 318 130 284 200 280 C270 284 322 318 330 400 Z" fill="#17161f" stroke="#e8b23a" stroke-width="2.5"/>
+    <path d="M176 284 L200 340 L224 284 Z" fill="#f4f1ea"/>
+    <path d="M186 292 L200 300 L214 292 L214 308 L200 300 L186 308 Z" fill="#d6262f"/>
+    <path d="M200 340 L200 400" stroke="#0c0b12" stroke-width="2"/>
+    <circle cx="200" cy="228" r="44" fill="#e2bd98" stroke="#e8b23a" stroke-width="2"/>
+    <path d="M168 248 C180 238 192 244 200 247 C208 244 220 238 232 248 C222 258 208 252 200 250 C192 252 178 258 168 248 Z" fill="#2a1d14"/>
+    <circle cx="184" cy="224" r="4.5" fill="#1a120c"/><circle cx="216" cy="224" r="4.5" fill="#1a120c"/>
+    <path d="M176 214 L192 211 M208 211 L224 214" stroke="#2a1d14" stroke-width="4" stroke-linecap="round"/>
+    <rect x="160" y="118" width="80" height="74" rx="4" fill="#111018" stroke="#e8b23a" stroke-width="2"/>
+    <rect x="160" y="172" width="80" height="11" fill="#c9a24a"/>
+    <ellipse cx="200" cy="191" rx="66" ry="11" fill="#111018" stroke="#e8b23a" stroke-width="2"/>
+  </g>
+  <g class="owHand">
+    <circle class="owPalmGlow" cx="0" cy="0" r="120" fill="url(#owGlow)"/>
+    <path d="M-34 70 L-30 34 L30 34 L34 70 Z" fill="#17161f" stroke="#e8b23a" stroke-width="2"/>
+    <rect x="-33" y="24" width="66" height="14" rx="3" fill="#f4f1ea"/>
+    <path d="M-30 26 C-38 0 -36 -26 -30 -34 L30 -34 C36 -26 38 0 30 26 Z" fill="#fff" stroke="#9a9488" stroke-width="2"/>
+    <rect x="-30" y="-88" width="14" height="60" rx="7" fill="#fff" stroke="#9a9488" stroke-width="2"/>
+    <rect x="-14" y="-98" width="14" height="70" rx="7" fill="#fff" stroke="#9a9488" stroke-width="2"/>
+    <rect x="2" y="-94" width="14" height="66" rx="7" fill="#fff" stroke="#9a9488" stroke-width="2"/>
+    <rect x="18" y="-80" width="13" height="54" rx="6.5" fill="#fff" stroke="#9a9488" stroke-width="2"/>
+    <rect x="-48" y="-33" width="15" height="48" rx="7.5" fill="#fff" stroke="#9a9488" stroke-width="2" transform="rotate(-29 -41 -10)"/>
+    <path d="M-12 -6 C-4 2 4 2 12 -6 M-14 10 C-4 16 4 16 14 10" stroke="#d8d2c4" stroke-width="2" fill="none"/>
+  </g>
+</svg><div class="chars"><b>伝</b><b>説</b></div><div class="lgWho"><i class="face" id="lgFace"></i><span id="lgWho"></span></div><p class="lgName" id="lgName"></p></div>
 
 <div class="hud">
   <div class="tags" id="tags" aria-hidden="true"></div>
@@ -34,6 +65,7 @@
       <div class="lv"><span id="lvText">Lv.1 ドパ見習い</span><i class="xp"><i id="xpBar"></i></i></div>
       <span class="raceNo" id="raceNo">第1R</span>
       <span class="fever" id="fever" hidden></span>
+      <span class="rush" id="rush" hidden></span>
       <div class="jp" title="ハズレの一部が積み立てられ、万馬券級の的中で全部もらえます"><span>ジャックポット</span><b id="jpVal">5,000</b></div>
       <div class="wallet" id="wallet"><span>所持コイン</span><b id="coins">1,000</b></div>
     </div>
@@ -151,7 +183,7 @@
 <script src="vendor/three.min.js"></script>
 <script src="vendor/net.js?v=2" async></script>
 <script src="data.js?v=3"></script>
-<script src="achievements.js?v=4"></script>
-<script src="game.js?v=11"></script>
+<script src="achievements.js?v=5"></script>
+<script src="game.js?v=12"></script>
 </body>
 </html>

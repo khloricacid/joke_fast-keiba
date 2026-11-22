@@ -76,6 +76,8 @@ window.FK_ACH = (() => {
     A('skill30', '馬・騎手', 's', '能力マニア', '自分の馬の騎手の特殊能力を30回見る', cnt('mySkills', 30)),
     A('skillWin', '馬・騎手', 's', '能力で勝つ', '自分の馬の騎手の特殊能力が発動したレースで的中', {test:c => W(c) && c.ev.skill}),
     A('gradeGold', '馬・騎手', 's', '超激アツ', '自分の馬で金のカットインを見る', cnt('myGold', 1)),
+    A('rushIn', '馬・騎手', 's', 'RUSH突入', '自分の馬の「伝説」で勝ってドパミンRUSHに入る', cnt('rushes', 1)),
+    A('rush5', '馬・騎手', 'g', '止まらない', 'ドパミンRUSHで5連チャン', {test:c => (c.st.bestRush || 0) >= 5, prog:c => [Math.min(5, c.st.bestRush || 0), 5]}),
     A('gradeRainbow', '馬・騎手', 'g', '伝説の目撃者', '自分の馬で「伝説」(虹)を見る', cnt('myRainbow', 1)),
     A('tenjo', '馬・騎手', 'g', '天井到達', '課金 重の「天井到達」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '天井到達'}),
     A('buzzWin', '馬・騎手', 'b', 'バズった', 'バズリタイシが爆発したレースで的中', {test:c => W(c) && c.ev.horse === 'バズリタイシ' && c.ev.traitHit}),
@@ -117,6 +119,7 @@ window.FK_ACH = (() => {
     A('allSix', '隠し', 'h', '全部負けた', '6着の馬に全ツッパ', {test:c => S_(c) && c.ev.all && c.ev.rank === 6}, true),
     A('rainbowWin', '隠し', 'h', '伝説になった', '「伝説」で払戻30倍以上', {test:c => W(c) && c.ev.skillGrade >= 4 && c.ev.tier >= 4}, true),
     A('allinLegend', '隠し', 'h', '全ツッパの神に愛された', '全ツッパで「伝説」を引いて勝つ', {test:c => W(c) && c.ev.all && c.ev.skillGrade >= 4}, true),
+    A('rush10', '隠し', 'h', 'ドパミン無限機関', 'ドパミンRUSHで10連チャン', {test:c => (c.st.bestRush || 0) >= 10}, true),
     A('rescue', '隠し', 'h', 'へこたれない', '破産したところを馬主に助けてもらう', {test:c => S_(c) && c.ev.rescue}, true),
     A('kyouyaru', '隠し', 'h', '本当に今日やった', '明日 弥留の「今日やる」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '今日やる'}, true),
     A('deshou', '隠し', 'h', 'でしょうね', 'シュウチュウゼロが気を散らしたレースで、シュウチュウゼロに賭けていた', {test:c => S_(c) && c.ev.horse === 'シュウチュウゼロ' && c.ev.traitHit}, true)
