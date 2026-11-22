@@ -167,3 +167,9 @@ time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-s
 .jc q::before{content:"勝利時「"}.jc q::after{content:"」"}
 .lines dd{font-weight:900;line-height:1.7}
 @media (max-width:520px){.hero{gap:12px;padding:12px}.hero .hsvg,.hero .jsvg{width:96px}.jgrid{grid-template-columns:minmax(0,1fr)}.nav a{padding:9px 12px}.filter input{width:100%}}
+
+.skname{font-family:var(--font-display);font-size:20px;margin:0 0 4px;color:var(--lamp)}
+.box.skill,.box.trait{border-top-color:var(--lamp)}
+.box.skill p,.box.trait p{margin:0 0 8px}
+.how{margin-top:14px}
+.how p{margin:0;max-width:60em}

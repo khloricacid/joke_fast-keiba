@@ -72,6 +72,13 @@ window.FK_ACH = (() => {
     A('mikka', '馬・騎手', 's', '4日目の壁', '三日 坊の騎乗で4回的中', {test:c => n(c.st.byJockey, '三日 坊') >= 4, prog:c => [Math.min(4, n(c.st.byJockey, '三日 坊')), 4]}),
     A('kakin', '馬・騎手', 's', '確率は収束する', '課金 重の騎乗で10回的中', {test:c => n(c.st.byJockey, '課金 重') >= 10, prog:c => [Math.min(10, n(c.st.byJockey, '課金 重')), 10]}),
     A('closer', '馬・騎手', 'b', '追込一気', '追込の馬で的中', {test:c => W(c) && c.ev.style === '追込'}),
+    A('skill1', '馬・騎手', 'b', '特殊能力', '自分の馬の騎手の特殊能力が発動する', cnt('mySkills', 1)),
+    A('skill30', '馬・騎手', 's', '能力マニア', '自分の馬の騎手の特殊能力を30回見る', cnt('mySkills', 30)),
+    A('skillWin', '馬・騎手', 's', '能力で勝つ', '自分の馬の騎手の特殊能力が発動したレースで的中', {test:c => W(c) && c.ev.skill}),
+    A('gradeGold', '馬・騎手', 's', '超激アツ', '自分の馬で金のカットインを見る', cnt('myGold', 1)),
+    A('gradeRainbow', '馬・騎手', 'g', '伝説の目撃者', '自分の馬で虹のカットインを見る', cnt('myRainbow', 1)),
+    A('tenjo', '馬・騎手', 'g', '天井到達', '課金 重の「天井到達」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '天井到達'}),
+    A('buzzWin', '馬・騎手', 'b', 'バズった', 'バズリタイシが爆発したレースで的中', {test:c => W(c) && c.ev.horse === 'バズリタイシ' && c.ev.traitHit}),
 
     // ---- 展開 ----
     A('fromLast', '展開', 's', 'ごぼう抜き', '道中最後方だった馬が差し切って的中', {test:c => W(c) && c.ev.fromLast}),
@@ -107,7 +114,10 @@ window.FK_ACH = (() => {
     A('nameless', '隠し', 'h', '名もなき富豪', '名前が「ななし」のまま所持コイン1万', {test:c => c.S.nick === 'ななし' && c.S.coins >= 10000}, true),
     A('readDb', '隠し', 'h', '研究熱心', 'データページを読む', {test:c => !!c.ev.dbSeen}, true),
     A('photoLose', '隠し', 'h', '写真うつりが悪い', '写真判定のレースで2着', {test:c => S_(c) && !c.ev.win && c.ev.photo && c.ev.rank === 2}, true),
-    A('allSix', '隠し', 'h', '全部負けた', '6着の馬に全ツッパ', {test:c => S_(c) && c.ev.all && c.ev.rank === 6}, true)
+    A('allSix', '隠し', 'h', '全部負けた', '6着の馬に全ツッパ', {test:c => S_(c) && c.ev.all && c.ev.rank === 6}, true),
+    A('rainbowWin', '隠し', 'h', '伝説になった', '虹のカットインが出たレースで的中', {test:c => W(c) && c.ev.skillGrade >= 4}, true),
+    A('kyouyaru', '隠し', 'h', '本当に今日やった', '明日 弥留の「今日やる」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '今日やる'}, true),
+    A('deshou', '隠し', 'h', 'でしょうね', 'シュウチュウゼロが気を散らしたレースで、シュウチュウゼロに賭けていた', {test:c => S_(c) && c.ev.horse === 'シュウチュウゼロ' && c.ev.traitHit}, true)
   ];
 
   // デイリーミッション(1日3つ、日付から選ぶ)
@@ -126,7 +136,9 @@ window.FK_ACH = (() => {
     {id:'ya', text:'ヤジを3回飛ばす', goal:3, on:e => e.type === 'stamp' ? 1 : 0},
     {id:'p500', text:'1回で500コイン以上の払戻', goal:1, on:e => e.type === 'settle' && e.win && e.pay >= 500 ? 1 : 0},
     {id:'nf', text:'1番人気以外で2回的中', goal:2, on:e => e.type === 'settle' && e.win && e.pop > 1 ? 1 : 0},
-    {id:'sec', text:'賭けた馬が2着(惜しい)', goal:1, on:e => e.type === 'settle' && !e.win && e.rank === 2 ? 1 : 0}
+    {id:'sec', text:'賭けた馬が2着(惜しい)', goal:1, on:e => e.type === 'settle' && !e.win && e.rank === 2 ? 1 : 0},
+    {id:'sk', text:'自分の馬の騎手の特殊能力を見る', goal:1, on:e => e.type === 'skill' ? 1 : 0},
+    {id:'sk2', text:'特殊能力が発動したレースで的中', goal:1, on:e => e.type === 'settle' && e.win && e.skill ? 1 : 0}
   ];
 
   // レベルで解放される見た目

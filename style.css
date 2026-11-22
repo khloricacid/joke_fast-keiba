@@ -596,3 +596,75 @@ body.calm #say{transition:none}
 /* 馬名が長くても脚質の札に重ならないように */
 .uma .name{overflow:hidden}
 @media (max-width:560px){.uma .name{height:8.7em;font-size:12px;letter-spacing:0}}
+
+/* ================= v8: 特殊能力のカットイン(期待度の色) ================= */
+#skillin{position:absolute;left:0;right:0;top:34%;height:clamp(84px,20vw,130px);pointer-events:none;opacity:0;z-index:4}
+#skillin .band{
+  --c1:#1f5fd1;--c2:#7ab8ff;
+  position:absolute;inset:0 -10%;display:flex;align-items:center;justify-content:center;gap:clamp(10px,2.5vw,22px);padding:0 12%;
+  background:linear-gradient(100deg,var(--ink) 0 18%,var(--c1) 38%,var(--c2) 62%,var(--ink) 84%);
+  border-top:5px solid var(--c2);border-bottom:5px solid var(--c2);transform:skewY(4deg) translateX(110%);overflow:hidden;
+}
+#skillin .band::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.7) 50%,transparent 60%);transform:translateX(-100%)}
+#skillin .face{flex:none;width:clamp(52px,12vw,84px);height:clamp(52px,12vw,84px);border-radius:8px;border:3px solid #fff;position:relative;
+  background:linear-gradient(hsl(var(--h,40) 80% 48%) 0 42%,#e8c9a8 42% 72%,hsl(var(--h,40) 80% 48%) 72%)}
+#skillin .face::after{content:"";position:absolute;left:18%;right:18%;top:52%;height:12%;background:var(--ink)}
+#skillin .txt{display:grid;min-width:0}
+#skillin small{font-weight:900;font-size:clamp(11px,2.8vw,15px);color:#fff;text-shadow:1px 1px 0 var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#skillin b{font-family:var(--font-display);font-weight:400;font-size:clamp(26px,7.5vw,56px);line-height:1.05;color:#fff;text-shadow:3px 3px 0 var(--ink),-1px -1px 0 var(--ink),1px -1px 0 var(--ink),-1px 1px 0 var(--ink);white-space:nowrap}
+#skillin em{flex:none;font-style:normal;font-family:var(--font-display);font-size:clamp(16px,4.6vw,32px);line-height:1;padding:6px 10px;background:var(--ink);color:var(--c2);border:3px solid var(--c2);transform:rotate(-6deg)}
+#skillin.go{opacity:1}
+#skillin.go .band{animation:skIn 1.35s cubic-bezier(.2,.9,.2,1) forwards}
+#skillin.go .band::after{animation:shine .7s .25s ease-out}
+#skillin.g-blue .band{--c1:#123a8a;--c2:#5fa8ff}
+#skillin.g-green .band{--c1:#0b6b3a;--c2:#4dff9a}
+#skillin.g-red .band{--c1:#8a0d18;--c2:#ff4d5a}
+#skillin.g-gold .band{--c1:#8a5a00;--c2:#ffd60a;box-shadow:0 0 40px rgba(255,214,10,.75)}
+#skillin.g-gold.go .band{animation-duration:1.6s}
+#skillin.g-rainbow .band{--c2:#fff;background:linear-gradient(100deg,var(--ink) 0 12%,#ff2d3d 24%,#ff9a1a 36%,#ffe14a 48%,#3dff8a 60%,#2de2ff 72%,#b14cff 84%,var(--ink) 94%);background-size:200% 100%;box-shadow:0 0 60px rgba(255,255,255,.8)}
+#skillin.g-rainbow.go .band{animation:skIn 1.9s cubic-bezier(.2,.9,.2,1) forwards,slide .9s linear infinite}
+#skillin.g-rainbow em{background:linear-gradient(90deg,#ff2d3d,#ffd60a,#2dff8a,#2de2ff,#b14cff);color:var(--ink);border-color:#fff}
+@keyframes skIn{0%{transform:skewY(4deg) translateX(110%)}16%,78%{transform:skewY(4deg) translateX(0)}100%{transform:skewY(4deg) translateX(-110%)}}
+
+.skillbar{position:absolute;right:max(10px,env(safe-area-inset-right));top:calc(var(--hud-top) + 92px);display:grid;gap:4px;justify-items:end;pointer-events:none;max-width:min(380px,80vw);z-index:3}
+body.is-bet .skillbar{display:none}
+.rib{font-weight:900;font-size:12px;line-height:1.35;padding:4px 10px;border-radius:3px;background:var(--ink);border-right:5px solid var(--rail);animation:toastIn .25s ease-out both}
+.rib.g-blue{border-color:#5fa8ff;color:#bcd9ff}
+.rib.g-green{border-color:#4dff9a;color:#c4ffdc}
+.rib.g-red{border-color:#ff4d5a;color:#ffc4c8}
+.rib.g-gold{border-color:#ffd60a;color:var(--pay);box-shadow:0 0 12px rgba(255,214,10,.5)}
+.rib.g-rainbow{border-color:#fff;background:linear-gradient(90deg,#3a0a5a,#0b4a52);color:#fff}
+.rib.up{border-color:#2dff8a;color:#c4ffdc}
+.rib.down{border-color:#ff8a8a;color:#ffd0d0}
+body.is-run #say,body.is-res #say{top:calc(var(--hud-top) + 160px)}
+
+/* 馬柱:調子・相性・能力 */
+.uma .cond{font-style:normal;font-size:11px;font-weight:900;margin-left:2px}
+.uma .cond.c2{color:#d1131f}.uma .cond.c1{color:#c25a00}.uma .cond.c0{color:#8a8576}.uma .cond.cm{color:#1f5fd1}.uma .cond.cm2{color:#123a8a}
+.uma .jk.match{text-decoration:underline;text-decoration-color:#12a150;text-decoration-thickness:2px;text-underline-offset:2px}
+.uma .jk.up{color:#b8860b}
+.uma[aria-pressed="true"] .jk.up{color:var(--pay)}
+body.calm #skillin .band::after{display:none}
+@media (prefers-reduced-motion:reduce){#skillin .band::after{display:none}}
+
+/* 確定演出:時間停止+全画面の「激アツ!!」 */
+body.omen-stop #gl{filter:saturate(.15) brightness(.45) contrast(1.2)}
+body.omen-stop .hud .live,body.omen-stop .caster,body.omen-stop #say,body.omen-stop .skillbar{opacity:0}
+#omen{position:fixed;inset:0;z-index:5;display:grid;place-content:center;justify-items:center;gap:4px;pointer-events:none;opacity:0;text-align:center}
+#omen.go{animation:omenBox 1.6s linear forwards}
+#omen small{font-weight:900;font-size:clamp(14px,3.6vw,22px);letter-spacing:.3em;color:#fff;background:var(--ink);padding:3px 14px;border:2px solid #fff}
+#omen b{font-family:var(--font-display);font-weight:400;font-size:clamp(64px,20vw,190px);line-height:1;transform:rotate(-5deg);
+  background:linear-gradient(90deg,#ff2d3d,#ff9a1a,#ffe14a,#3dff8a,#2de2ff,#b14cff,#ff2d3d);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(5px 5px 0 #000) drop-shadow(0 0 30px rgba(255,255,255,.6))}
+#omen i{font-style:normal;font-weight:900;font-size:clamp(16px,4.4vw,28px);color:#fff;text-shadow:2px 2px 0 #000}
+#omen.go b{animation:omenSlam 1.6s cubic-bezier(.2,1.4,.4,1) forwards,slide .8s linear infinite}
+#omen.go small,#omen.go i{animation:omenFade 1.6s ease-out forwards}
+#omen.calm b{animation:none;background:none;color:var(--pay);-webkit-background-clip:border-box;background-clip:border-box}
+#omen.calm small,#omen.calm i{animation:none}
+@keyframes omenBox{0%{opacity:0}22%{opacity:1}88%{opacity:1}100%{opacity:0}}
+@keyframes omenSlam{0%,22%{transform:rotate(-5deg) scale(3);opacity:0}34%{transform:rotate(-5deg) scale(.92);opacity:1}42%{transform:rotate(-5deg) scale(1.04)}50%,100%{transform:rotate(-5deg) scale(1)}}
+@keyframes omenFade{0%,30%{opacity:0;transform:translateY(10px)}42%,100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#omen.go b,#omen.go small,#omen.go i{animation:none}}
+
+#omen{z-index:7}
+#omen b{-webkit-text-stroke:3px #16130f}

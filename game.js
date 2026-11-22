@@ -46,16 +46,87 @@ function rng32(seed){
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// 特殊能力の期待度。色が上がるほど効果が大きい(ef は能力の基本効果に掛ける割合)
+const GRADES = [
+  {id:'blue', name:'青', label:'発動', ef:0.4, p:0.45, hue:210},
+  {id:'green', name:'緑', label:'好調', ef:0.8, p:0.28, hue:140},
+  {id:'red', name:'赤', label:'激アツ', ef:1.5, p:0.17, hue:355},
+  {id:'gold', name:'金', label:'超激アツ', ef:2.4, p:0.08, hue:48},
+  {id:'rainbow', name:'虹', label:'伝説', ef:4.5, p:0.02, hue:0}
+];
+const GRADE_EF = GRADES.reduce((a, g) => a + g.p * g.ef, 0);
+const abilityOf = st => st[0] * 0.3 + st[1] * 0.3 + st[2] * 0.1 + st[3] * 0.1 + st[4] * 0.2;
+// 開催条件(空)や騎乗の組み合わせで発動する特性・能力の判定
+function condOK(c, h, sky, sk){
+  if (c === 'night') return sky === 0;
+  if (c === 'dusk') return sky === 1;
+  if (c === 'aurora') return sky === 2;
+  if (c === 'gold') return sky === 3;
+  if (c === 'notmain') return !h.main;
+  if (c === 'fresh') return !!h.fresh;
+  if (c === 'nige') return !!DATA && DATA.horses[h.id].style === '逃げ';
+  if (c === 'oshi') return !!(sk && sk.oshi && sk.oshi.includes(h.id));
+  return false;
+}
 function buildRace(seed){
-  const r = rng32(seed);
+  const r = rng32(seed), rT = rng32((seed ^ 0x9e3779b9) >>> 0);
   const idx = NAMES.map((_, i) => i);
   for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
-  const hs = []; let sum = 0;
+  const gold = rT() < 0.12;                 // ゴールデンレース:払戻2倍
+  const sky = gold ? 3 : seed % 3;          // 0 ナイター / 1 夕焼け / 2 オーロラ / 3 ゴールデン
+  const hs = [];
   for (let i = 0; i < 6; i++) {
-    const x = r(); const w = 1 + x * x * x * 13; sum += w;
-    hs.push({no:i + 1, id:idx[i], name:NAMES[idx[i]], w, coat:Math.floor(r() * COATS.length), mark:'', jk:''});
+    const x = r();
+    hs.push({no:i + 1, id:idx[i], name:NAMES[idx[i]], luck:x, L:1 + x * x * x * 13, coat:Math.floor(r() * COATS.length), mark:'', jk:''});
   }
-  for (const h of hs) { h.p = h.w / sum; h.odds = Math.min(99.9, Math.max(1.1, Math.round(0.94 / h.p * 10) / 10)); }
+  if (DATA) {                              // 騎手:主戦が空いていれば主戦、かぶったら代打、それもだめなら空いている騎手(初めて組む)
+    const used = new Set();
+    for (const h of hs) {
+      const hd = DATA.horses[h.id];
+      let j = hd.jk.find(x => !used.has(x)), fresh = false;
+      if (j === undefined) { j = DATA.jockeys.findIndex((_, x) => !used.has(x)); fresh = true; }
+      used.add(j); h.jki = j; h.jkFull = DATA.jockeys[j].name; h.jk = h.jkFull.replace(' ', ''); h.fresh = fresh; h.main = j === hd.jk[0];
+    }
+  }
+  // 強さ = 運(主役) × 能力と騎手(味付け) × 相性 × 特性 × 特殊能力。
+  // オッズは「発動するかもしれない分」の期待値で決め、実際の着順は発動したかどうかで決める
+  const notes = [];
+  for (const h of hs) {
+    let a = 1, known = 1, real = 1, expect = 1;
+    if (DATA) {
+      const hd = DATA.horses[h.id], J = DATA.jockeys[h.jki];
+      const jo = J.st.reduce((x, y) => x + y, 0) / J.st.length;
+      a = Math.exp(0.35 * ((0.75 * abilityOf(hd.st) + 0.25 * jo) - 65) / 15);
+      if (J.style === hd.style) { a *= 1.12; h.match = true; }
+      const tr = hd.trait;
+      if (tr) {
+        if (tr.base) known *= tr.base;
+        if (tr.kind === 'fixed') known *= tr.m;
+        else if (tr.kind === 'cond') { if (condOK(tr.cond, h, sky)) { known *= tr.m; h.traitOn = true; notes.push(h.name + 'の特性「' + tr.name + '」' + (tr.m >= 1 ? 'が出ている' : 'で今日は不利')); } }
+        else if (tr.kind === 'rand') {
+          const hit = rT() < tr.p;
+          real *= hit ? tr.m : tr.m2; expect *= tr.p * tr.m + (1 - tr.p) * tr.m2;
+          if (hit) h.traitHit = {name:tr.name, good:!!tr.good};
+        }
+      }
+      const sk = J.ability;
+      if (sk) {
+        const up = !!sk.cond && condOK(sk.cond, h, sky, sk), p = up ? sk.cp : sk.p;
+        if (up) { h.skillUp = true; notes.push(J.name + 'の「' + sk.name + '」が出やすい(' + h.name + ')'); }
+        const hit = rT() < p, gx = rT();
+        let gi = 0, acc = 0;
+        for (; gi < GRADES.length - 1; gi++) { acc += GRADES[gi].p; if (gx < acc) break; }
+        const g = GRADES[gi], mult = 1 + (sk.m - 1) * g.ef;
+        if (hit) { real *= mult; h.skill = {name:sk.name, timing:sk.timing, jockey:J.name, jki:h.jki, grade:gi, mult}; }
+        expect *= 1 + p * (sk.m - 1) * GRADE_EF;
+      }
+    }
+    h.wOdds = h.L * a * known * expect;
+    h.w = h.L * a * known * real;
+  }
+  let sum = 0;
+  for (const h of hs) sum += h.wOdds;
+  for (const h of hs) { h.p = h.wOdds / sum; h.odds = Math.min(99.9, Math.max(1.1, Math.round(0.94 / h.p * 10) / 10)); }
   const fav = hs.slice().sort((a, b) => (b.p - a.p) || (a.no - b.no));
   ['◎','○','▲','△'].forEach((m, i) => { fav[i].mark = m; });
   fav.forEach((h, i) => { h.pop = i + 1; });
@@ -73,26 +144,18 @@ function buildRace(seed){
   });
   for (const h of hs) {
     const s = r(), fixed = DATA ? DATA.horses[h.id].style : '';
-    // 脚質と毛色は馬ごとに決まっている。着順には影響せず、道中の位置取りだけが変わる
+    // 脚質と毛色は馬ごとに決まっている。脚質は道中の位置取りを変える
     h.style = fixed || (s < 0.25 ? '逃げ' : s < 0.5 ? '先行' : s < 0.78 ? '差し' : '追込');
     h.k = fixed ? {'逃げ':0.9, '先行':0.965, '差し':1.03, '追込':1.09}[fixed] + s * 0.06 : 0.9 + s * 0.25;
+    if (h.skill) h.k *= h.skill.timing === 'start' ? 1 - 0.05 * GRADES[h.skill.grade].ef : h.skill.timing === 'late' ? 1 + 0.06 * GRADES[h.skill.grade].ef : 1;
     if (DATA) h.coat = DATA.horses[h.id].coat;
     h.amp = 0.012 + r() * 0.02; h.fq = 1 + r() * 1.5; h.ph = r() * 6.28;
   }
-  if (DATA) {                              // 騎手:主戦が空いていれば主戦、かぶったら代打
-    const used = new Set();
-    for (const h of hs) {
-      let j = DATA.horses[h.id].jk.find(x => !used.has(x));
-      if (j === undefined) j = DATA.jockeys.findIndex((_, x) => !used.has(x));
-      used.add(j); h.jki = j; h.jkFull = DATA.jockeys[j].name; h.jk = DATA.jockeys[j].name.replace(' ', '');
-    }
-  }
-  const gold = r() < 0.12;                 // ゴールデンレース:払戻2倍
   const tMid = hs[order[0] - 1].T * 0.5;   // 道中(1着の半分の時点)で最後方だった馬
   const midLast = hs.slice().sort((a, b) => prog(a, tMid) - prog(b, tMid))[0].no;
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
   const tWin = hs[order[0] - 1].T, a = tWin - SL_PRE, slowDisp = (SL_PRE + SL_POST) / SL_RATE;
-  return {seed, hs, order, margin, gold, midLast, photo:gap1 < 0.05, tWin, a, slowDisp,
+  return {seed, hs, order, margin, gold, sky, notes, midLast, photo:gap1 < 0.05, tWin, a, slowDisp,
     tSettle:a + SL_PRE / SL_RATE,                         // 画面上で1着がゴールする時刻
     dur:T + 0.3 + slowDisp - (SL_PRE + SL_POST)};         // 画面上のレース時間
 }
@@ -158,7 +221,7 @@ const calm = () => reduced || S.calm;
 const PID = Array.from({length:12}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 const me = {pick:null, sit:false, missed:0, away:document.hidden, g:null, emo:null, win:null};
 const V = {n:0, seed:-1, ph:'idle', race:null, betStart:0, firstPick:0, raceStart:0, settled:false, settledAt:0, late:false, locked:null, res:null,
-  lead:0, slow:false, stretch:false, myRank:0, quick:false, calloutAt:0, payAnim:null, omen:false, chance:false, deadline:false, leadSince:0, comboHit:false};
+  lead:0, slow:false, stretch:false, myRank:0, quick:false, calloutAt:0, payAnim:null, skillShown:new Set(), skillOn:{}, omenShown:false, pauseStart:0, pauseUntil:0, pauseTotal:0, omen:false, chance:false, deadline:false, leadSince:0, comboHit:false};
 let lastPs = [], lastRoomCheck = 0, sessRun = 0, saySeq = 0;
 let lastG = null, hostPhaseAt = 0, hostFirstPick = 0, dirty = false, lastSent = 0;
 let net = null, roomCode = 'lobby', netOpts = null;
@@ -172,7 +235,7 @@ const vWin = w => (w && typeof w === 'object' && Number.isFinite(w.t) && isInt(w
 const newSeed = () => (Math.random() * 4294967296) >>> 0;
 
 function myState(){
-  return {pid:PID, fk:4, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(),
+  return {pid:PID, fk:5, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
@@ -180,16 +243,17 @@ function pushPresence(){
   if (net) { try { net.send(myState()); } catch (e) {} }
 }
 function players(now){
-  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(),
+  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win}];
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
     const s = o.st;
-    if (!s || s.fk !== 4) continue;
+    if (!s || s.fk !== 5) continue;
     out.push({peer:pid, isMe:false, nick:clean(s.nick) || 'ななし',
       hue:Number.isFinite(s.hue) ? ((Math.floor(s.hue) % 360) + 360) % 360 : 0,
       coins:Number.isFinite(s.coins) ? clamp(Math.floor(s.coins), 0, 1e12) : 0,
       streak:isInt(s.streak, 0, 1e6) ? s.streak : 0, lv:isInt(s.lv, 1, 99) ? s.lv : 1, tb:isInt(s.tb, 0, 1e12) ? s.tb : 0,
+      pz:isInt(s.pz, 0, 5000) ? s.pz : 0, pn:isInt(s.pn, 0, 1e9) ? s.pn : 0,
       pick:vPick(s.pick), sit:!!s.sit, away:!!s.away, g:vG(s.g), emo:vEmo(s.emo), win:vWin(s.win)});
   }
   return out;
@@ -248,7 +312,9 @@ function drive(ps, now){
     }
   } else {
     const dur = (V.race && V.seed === g.seed ? V.race.dur : 6.5) * 1000;
-    if (el >= dur + (visible.length > 1 ? 3200 : 2700)) {
+    // 確定演出で時間を止めた人がいれば、その分だけ次のレースを待つ(結果を見る時間を削らない)
+    const extra = Math.max(0, ...visible.filter(p => p.pn === g.n).map(p => p.pz || 0));
+    if (el >= dur + extra + (visible.length > 1 ? 3200 : 2700)) {
       me.g = {n:g.n + 1, seed:S.cur && S.cur.n === g.n + 1 ? S.cur.seed : newSeed(), ph:'bet', hs:g.hs}; hostPhaseAt = now; dirty = true;
     }
   }
@@ -260,7 +326,7 @@ function observe(g, now){
     V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed);
     V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
     V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0; V.quick = false; V.payAnim = null;
-    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false;
+    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false; V.skillShown = new Set(); V.skillOn = {}; V.omenShown = false; V.pauseStart = 0; V.pauseUntil = 0; V.pauseTotal = 0;
     if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.05);
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
@@ -319,7 +385,8 @@ function settle(forced){
     const hr = new Date().getHours();
     const ev = {type:'settle', win:L.h === win, odds:L.odds, bet:L.bet, all:L.all, quick:L.quick, deadline:L.deadline, horse:h.name, jockey:h.jkFull || '',
       style:h.style, gate:L.h, pop:h.pop, rank:h.rank, photo:R.photo, gold:R.gold, fromLast:R.midLast === win, night:hr >= 2 && hr < 4, calm:calm(),
-      roomN:room.n, roomWinners:room.winners, roomSame:room.same, pay:0, tier:0, bust:false, streak:0};
+      roomN:room.n, roomWinners:room.winners, roomSame:room.same, pay:0, tier:0, bust:false, streak:0,
+      skill:!!h.skill, skillName:h.skill ? h.skill.name : '', skillGrade:h.skill ? h.skill.grade : -1, traitHit:h.traitHit || null};
     inc('races');
     if (ev.win) {
       const pay = Math.floor(L.bet * L.odds * L.mult), m = pay / L.bet;
@@ -334,7 +401,6 @@ function settle(forced){
       if (L.bet <= 10) inc('tinyWins');
       if (R.photo) inc('photoWins');
       if (R.gold) inc('goldWins');
-      if (V.omen) inc('omens');
       addXp(20 + Math.min(120, Math.round(L.odds * 6)));
       // ジャックポット:万馬券級(払戻30倍以上)で必ず、それ以外の的中でもまれに
       if (tier >= 4 || Math.random() < 1 / 150) { res.jp = S.jp; S.coins = Math.min(1e12, S.coins + S.jp); inc('jackpots'); S.jp = 5000; }
@@ -678,6 +744,15 @@ function sWin(tier){
   A.crowd.gain.setValueAtTime(0.2 + tier * 0.07, t);
   A.crowd.gain.setTargetAtTime(0.012, t + 0.5 + tier * 0.3, 0.7);
 }
+function sSkill(lv, mine){
+  if (!sfxOK()) return;
+  const t = A.ctx.currentTime, v = mine ? 1 : 0.45;
+  hiss(A.sfx, t, 0.3, 0.3 * v, 'bandpass', 700, 1.2, 6000);
+  const chords = [[76, 83], [76, 79, 83], [72, 76, 79, 84], [72, 76, 79, 84, 88], [72, 76, 79, 84, 88, 91, 96]];
+  chords[lv].forEach((n, i) => tone(A.sfx, lv >= 3 ? 'square' : 'triangle', mtof(n), t + 0.12 + i * 0.045, 0.22, 0.09 * v));
+  if (mine && lv >= 3) tone(A.sfx, 'sawtooth', 220, t, 0.6, 0.12, 1760);
+  if (mine && lv >= 4) setTimeout(sHorn, 300);
+}
 function sOmen(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 300, t, 0.7, 0.14, 2600); tone(A.sfx, 'square', 600, t, 0.7, 0.06, 5200); [84, 88, 91, 96].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.7 + i * 0.05, 0.18, 0.09)); } }
 function sChance(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', mtof(79), t, 0.08, 0.1); tone(A.sfx, 'square', mtof(86), t + 0.09, 0.14, 0.1); } }
 function sReel(){ if (sfxOK()) tone(A.sfx, 'square', 1200 + Math.random() * 400, A.ctx.currentTime, 0.025, 0.04); }
@@ -996,8 +1071,8 @@ function update3D(now, dt, racing, t, tau, replay){
   if (!G || !V.race) return;
   const R = V.race, cam = G.camera, myH = myHorseNo();
   const live = racing && !V.settled, hot = S.streak >= 2 || R.gold, quiet = calm();
-  const omenSky = V.omen && racing && !V.late && t >= R.a && !quiet;
-  setSky(omenSky ? 4 : (racing && V.slow && !V.settled && unlocked(30)) ? 2 : R.gold ? 3 : R.seed % 3);
+  const omenSky = V.omenShown && racing && !V.late && !V.pauseUntil;
+  setSky(omenSky ? 4 : (racing && V.slow && !V.settled && unlocked(30)) ? 2 : R.sky);
   let lead = -1e9, mine = 0;
   const xs = [];
   for (const H of G.horses) {
@@ -1012,18 +1087,22 @@ function update3D(now, dt, racing, t, tau, replay){
     H.marker.visible = isMine;
     if (isMine) { H.marker.position.y = 4.1 + Math.sin(now / 150) * 0.2; H.marker.rotation.y = now / 260; mine = H.x; if (unlocked(15) && !quiet) H.marker.material.color.setHSL((now / 900) % 1, 1, 0.6); else H.marker.material.color.setHex(0xffd60a); }
     // 光の尾:自分の馬は金色で長く
+    const so = V.skillOn ? V.skillOn[H.no] : undefined;
     const tv = racing && run > 0.55 && !quiet;
     H.trail.visible = tv;
     if (tv) {
       H.trail.scale.x = (isMine ? 9 : 5) * run * (0.85 + beat * 0.3);
       H.trail.scale.y = isMine ? 1.5 : 1;
-      if (isMine && unlocked(3)) H.tMat.color.setHSL((now / 600) % 1, 1, 0.6); else H.tMat.color.setHex(isMine ? 0xffd60a : H.glow);
+      if (so !== undefined) {                     // 特殊能力のオーラ(期待度の色)
+        if (so >= 4) H.tMat.color.setHSL((now / 400) % 1, 1, 0.6); else H.tMat.color.setHSL(GRADES[so].hue / 360, 1, 0.58);
+        H.trail.scale.x *= 1.25 + so * 0.18; H.trail.scale.y *= 1 + so * 0.15; H.tMat.opacity = 0.85;
+      } else if (isMine && unlocked(3)) H.tMat.color.setHSL((now / 600) % 1, 1, 0.6); else H.tMat.color.setHex(isMine ? 0xffd60a : H.glow);
       H.tMat.opacity = isMine ? 0.8 : 0.4;
     }
     xs.push(H.x); if (H.x > lead) lead = H.x;
     if (racing && run > 0.5 && !quiet) {
       if (Math.random() < 0.7) spawn(G.dust, H.x - 0.9, 0.12, H.z + (Math.random() - 0.5) * 0.5, -3 - Math.random() * 5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 2, 0.55);
-      if (isMine && (hot || (V.locked && V.locked.all) || (h.rank === 1 && tau >= h.T))) spawn(G.sparks, H.x - 0.6 + Math.random() * 1.6, 0.8 + Math.random() * 1.6, H.z + (Math.random() - 0.5) * 0.9, -4 - Math.random() * 6, 1 + Math.random() * 3, (Math.random() - 0.5) * 3, 0.5);
+      if ((isMine && (hot || (V.locked && V.locked.all) || (h.rank === 1 && tau >= h.T))) || (so !== undefined && so >= 2)) spawn(G.sparks, H.x - 0.6 + Math.random() * 1.6, 0.8 + Math.random() * 1.6, H.z + (Math.random() - 0.5) * 0.9, -4 - Math.random() * 6, 1 + Math.random() * 3, (Math.random() - 0.5) * 3, 0.5);
     }
   }
   const rate = racing && V.slow ? SL_RATE : 1;
@@ -1283,6 +1362,69 @@ function cutIn(L){
   $('cutSay').textContent = V.omen ? '激アツ!?' : L.all ? '全ツッパ!!' : h.odds >= 15 ? '大穴いけ!!' : '行け!!';
   el.className = ''; void el.offsetWidth; el.className = 'go' + (L.all ? ' all' : '') + (V.omen && Math.random() < 0.5 ? ' omen' : '');
 }
+// 特殊能力のカットイン。期待度(青→緑→赤→金→虹)で色・光・揺れ・音が変わる
+const SKILL_AT = {start:0.05, mid:0.42, late:0.66};
+// 確定演出:最後の直線で時間を止め、画面いっぱいに「激アツ!!」を出す。当たるレースでだけ出る
+const OMEN_MS = 1600;
+function startOmen(now){
+  V.omenShown = true; V.pauseStart = now; V.pauseUntil = now + OMEN_MS;
+  $('skillin').className = '';   // 能力のカットインと重ならないように
+  inc('omens'); save(); dirty = true;
+  const el = $('omen');
+  el.className = ''; void el.offsetWidth; el.className = 'go' + (calm() ? ' calm' : '');
+  document.body.classList.add('omen-stop');
+  if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0, A.ctx.currentTime, 0.02);
+  if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 70, t, 0.35, 1, 30); }
+  castSay('', false);
+  setTimeout(() => {
+    sOmen(); buzz([150, 60, 150, 60, 300]);
+    if (!calm()) { flash('rainbow'); rays = 1; raysRb = true; for (let i = 0; i < 8; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.12 + Math.random() * 0.3, Math.random() * 360, 70), i * 110); }
+    speak('激アツ!', true);
+  }, 380);
+  setTimeout(() => {
+    document.body.classList.remove('omen-stop');
+    if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.12, A.ctx.currentTime, 0.05);
+    castSay('止まらない!そのまま!', true);
+  }, OMEN_MS);
+}
+// そのレースで止めている(止めた)時間。進行役が待ち時間に足す
+function pauseFor(n){ return n && n === V.n ? Math.round(V.pauseTotal + (V.pauseUntil ? OMEN_MS : 0)) : 0; }
+// 一時停止を差し引いたレース経過時間(秒)
+function raceTime(now){
+  if (V.pauseUntil && now >= V.pauseUntil) { V.pauseTotal += V.pauseUntil - V.pauseStart; V.pauseUntil = 0; }
+  const at = V.pauseUntil ? V.pauseStart : now;
+  return (at - V.raceStart - V.pauseTotal) / 1000;
+}
+function ribbon(text, kind){
+  const box = $('skillbar'), el = document.createElement('div');
+  el.className = 'rib ' + kind; el.textContent = text;
+  box.appendChild(el);
+  while (box.childElementCount > 3) box.firstElementChild.remove();
+  setTimeout(() => el.remove(), 2600);
+}
+function showSkill(h, mine){
+  const sk = h.skill, g = GRADES[sk.grade];
+  V.skillShown.add(h.no); V.skillOn[h.no] = sk.grade;
+  sSkill(sk.grade, mine);
+  if (!mine) { ribbon('★ ' + sk.jockey + '「' + sk.name + '」【' + g.name + '】', 'g-' + g.id); return; }
+  inc('mySkills'); if (sk.grade >= 3) inc('myGold'); if (sk.grade >= 4) inc('myRainbow');
+  missionProgress({type:'skill'}); checkAch({type:'skill'}); save();
+  castSay(sk.jockey + 'の「' + sk.name + '」!', true);
+  if (calm()) { ribbon('★ ' + sk.jockey + '「' + sk.name + '」【' + g.name + '・' + g.label + '】', 'g-' + g.id); return; }
+  const el = $('skillin');
+  $('skFace').style.setProperty('--h', String((sk.jki * 37 + 12) % 360));
+  setText($('skWho'), sk.jockey + '(' + h.no + '番 ' + h.name + ')');
+  setText($('skName'), sk.name);
+  setText($('skGrade'), g.label);
+  el.className = ''; void el.offsetWidth; el.className = 'go g-' + g.id;
+  const lv = sk.grade;
+  if (lv >= 1) flash(lv >= 4 ? 'rainbow' : lv >= 3 ? 'gold' : 'soft');
+  if (lv >= 2) shake(lv >= 4);
+  if (lv >= 3) { starBurst(0.5, 0.42, 14 + lv * 6, lv >= 4 ? 0 : 50); kick3D(0.6 + lv * 0.1); }
+  if (lv >= 4) { rays = 1; raysRb = true; for (let i = 0; i < 6; i++) setTimeout(() => firework(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.3, Math.random() * 360, 60), i * 130); }
+  buzz([[20], [30, 30, 30], [40, 30, 60], [60, 40, 60, 40, 120], [100, 50, 100, 50, 100, 50, 300]][lv]);
+}
+
 // 騎手のひとこと(画面下の吹き出し)
 let sayTimer = 0;
 function jockeySay(no, kind, ms){
@@ -1332,13 +1474,15 @@ function renderRound(){
     b.type = 'button'; b.className = 'uma' + (h.odds >= 15 ? ' ana' : ''); b.id = 'uma' + h.no;
     b.style.setProperty('--i', String(i));
     b.setAttribute('aria-pressed', 'false');
-    b.setAttribute('aria-label', h.no + '番 ' + h.name + ' ' + h.style + (h.jk ? ' 騎手' + h.jk : '') + ' 単勝' + h.odds.toFixed(1) + '倍');
+    b.setAttribute('aria-label', h.no + '番 ' + h.name + ' ' + h.style + (h.jk ? ' 騎手' + h.jk : '') + (h.match ? ' 得意脚質が合う' : '') + (h.skillUp ? ' 特殊能力が出やすい' : '') + ' 単勝' + h.odds.toFixed(1) + '倍');
     const waku = document.createElement('span'); waku.className = 'waku'; waku.textContent = String(h.no);
     waku.style.background = FRAME[h.no - 1].bg; waku.style.color = FRAME[h.no - 1].fg;
     const sh = document.createElement('span'); sh.className = 'shirushi'; sh.textContent = h.mark;
+    const cond = h.luck > 0.85 ? ['↑↑', 'c2', '絶好調'] : h.luck > 0.62 ? ['↑', 'c1', '好調'] : h.luck > 0.3 ? ['→', 'c0', '普通'] : h.luck > 0.12 ? ['↓', 'cm', '不調'] : ['↓↓', 'cm2', '絶不調'];
+    const cd = document.createElement('i'); cd.className = 'cond ' + cond[1]; cd.textContent = cond[0]; sh.appendChild(cd);
     const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = h.name;
     const st = document.createElement('span'); st.className = 'style'; st.textContent = h.style;
-    const jk = document.createElement('span'); jk.className = 'jk'; jk.textContent = h.jk;
+    const jk = document.createElement('span'); jk.className = 'jk' + (h.match ? ' match' : '') + (h.skillUp ? ' up' : ''); jk.textContent = h.jk + (h.skillUp ? '★' : '');
     const od = document.createElement('span'); od.className = 'odds'; od.textContent = h.odds.toFixed(1);
     const sm = document.createElement('small'); sm.textContent = '倍'; od.appendChild(sm);
     const vt = document.createElement('span'); vt.className = 'votes';
@@ -1348,6 +1492,7 @@ function renderRound(){
   });
   elBash.replaceChildren(...umaEls);
   if (G) for (const H of G.horses) { const c = COATS[R.hs[H.no - 1].coat]; H.mBody.color.set(c.body); H.mDark.color.set(c.dark); }
+  if (!V.late) R.notes.slice(0, 2).forEach((t, i) => setTimeout(() => toast(t, 'join'), 300 + i * 500));
   if (R.gold && !V.late) {
     toast('ゴールデンレース! このレースは払戻2倍', 'gold');
     if (!calm()) { flash('gold'); for (let i = 0; i < 5; i++) setTimeout(() => starBurst(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.3, 14, 50), i * 120); }
@@ -1448,7 +1593,7 @@ function ui(ps, now){
   B.toggle('is-gold', !!R.gold && !quiet);
   B.toggle('calm', quiet);
   A.fever = S.streak >= 2;
-  setText($('raceNo'), '第' + V.n + 'R');
+  setText($('raceNo'), '第' + V.n + 'R' + (DATA && R.sky < 3 ? ' ' + DATA.skies[R.sky] : ''));
   const fv = $('fever'), mult = streakMult(S.streak);
   fv.hidden = mult === 1; setText(fv, mult >= 1.5 ? 'FEVER 払戻×1.5' : '連勝ボーナス×1.2');
   const lv = lvOf(S.xp), base = lv > 1 ? xpNeed(lv - 1) : 0;
@@ -1554,11 +1699,15 @@ function liveHud(now, racing, t, tau){
   if (slow && !V.slow && !V.settled) {
     if (A.ctx) { A.mfilt.frequency.setTargetAtTime(380, A.ctx.currentTime, 0.07); if (S.bgm) A.music.gain.setTargetAtTime(0.12, A.ctx.currentTime, 0.08); }
     sRoll(); callout('勝負所!!', 'lead');
-    if (V.omen) { setTimeout(() => { callout('激アツ!!', 'omen'); sOmen(); flash('rainbow'); buzz([120, 60, 120]); }, 150); }
-    else if (V.chance) setTimeout(() => { callout('チャンス!', 'up'); sChance(); }, 150);
+    if (V.chance && !V.omen) setTimeout(() => { callout('チャンス!', 'lead'); sChance(); buzz([30, 30, 30]); }, 150);
   }
   V.slow = slow;
   const myH = myHorseNo();
+  if (V.omen && !V.omenShown && !V.settled && u >= 0.6) startOmen(now);
+  if (!V.settled) for (const h of R.hs) {
+    if (h.skill && !V.skillShown.has(h.no) && u >= SKILL_AT[h.skill.timing]) showSkill(h, h.no === myH);
+    if (h.traitHit && !V.skillShown.has(-h.no) && u >= 0.4) { V.skillShown.add(-h.no); ribbon((h.traitHit.good ? '▲ ' : '▼ ') + h.no + '番 ' + h.name + '「' + h.traitHit.name + '」' + (h.traitHit.good ? 'が爆発!' : 'で失速…'), h.traitHit.good ? 'up' : 'down'); }
+  }
   if (!V.settled) {
     if (u >= 0.78 && !V.stretch) { V.stretch = true; castSay('最後の直線!先頭は' + leadNo + '番 ' + R.hs[leadNo - 1].name); cheer(0.16); }
     else if (leadNo !== V.lead && tau > 0.6) castSay(leadNo + '番 ' + R.hs[leadNo - 1].name + (V.lead ? ' かわして先頭!' : ' 先頭!'));
@@ -1698,8 +1847,9 @@ function frame(){
   const now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
   const racing = V.ph === 'run' && !V.late;
-  const t = racing ? (now - V.raceStart) / 1000 : 0;
+  const t = racing ? raceTime(now) : 0;
   const tau = racing ? warp(V.race, t) : 0;
+  const paused = !!V.pauseUntil;
   if (racing && !V.settled && t >= V.race.tSettle) settle(false);
   beatFrame(now, dt);
   liveHud(now, racing, t, tau);
@@ -1708,7 +1858,7 @@ function frame(){
   update3D(now, dt, racing, t, rp !== null ? rp : tau, rp !== null);
   const u = racing ? clamp(tau / V.race.tWin, 0, 1) : 0;
   drawFx(dt, racing, u);
-  audioFrame(racing && !V.settled, racing && V.slow && !V.settled, u);
+  audioFrame(racing && !V.settled && !paused, racing && V.slow && !V.settled && !paused, u);
   const bq = Math.round(beat * 5);
   if (bq !== beatShown) { beatShown = bq; document.documentElement.style.setProperty('--beat', (bq / 5).toFixed(1)); }
   if (Math.abs(S.coins - shownCoins) > 0.5) shownCoins += (S.coins - shownCoins) * 0.14; else shownCoins = S.coins;

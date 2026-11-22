@@ -14,6 +14,7 @@ function rng32(seed){
 }
 // 総合値:スピードと瞬発力を重く、スタミナは軽く(5秒で終わるので)
 const overall = h => Math.round(h.st[0] * 0.3 + h.st[1] * 0.3 + h.st[2] * 0.1 + h.st[3] * 0.1 + h.st[4] * 0.2);
+const fx = (m, ef) => (1 + (m - 1) * ef).toFixed(2);
 const jOverall = j => Math.round(j.st.reduce((a, b) => a + b, 0) / j.st.length);
 const grade = v => v >= 90 ? 'S' : v >= 80 ? 'A' : v >= 65 ? 'B' : v >= 45 ? 'C' : v >= 25 ? 'D' : v >= 10 ? 'E' : 'G';
 const gcls = v => 'g' + grade(v);
@@ -112,7 +113,8 @@ function pageHorses(){
     '<div class="filter"><label for="q">さがす</label><input id="q" type="search" value="' + esc(hQuery) + '" placeholder="馬名・騎手名" autocomplete="off">' +
     ['', '逃げ', '先行', '差し', '追込'].map(s => '<button type="button" data-style="' + s + '" aria-pressed="' + (hFilter === s) + '">' + (s || 'すべて') + '</button>').join('') + '</div>' +
     '<div class="scroll" id="htable">' + horseTable() + '</div>' +
-    '<p class="note">見出しを押すと並べ替えます。総合はスピードと瞬発力を重く、スタミナを軽く見た値です(5秒で終わるため)。</p>';
+    '<p class="note">見出しを押すと並べ替えます。総合はスピードと瞬発力を重く、スタミナを軽く見た値です(5秒で終わるため)。</p>' +
+    '<section class="box how"><h3>レースの強さの決まり方</h3><p>いちばん大きいのはその日の調子(運)です。そこに、馬の総合値と騎手の能力、騎手の得意脚質との相性、馬の特性、騎手の特殊能力が少しずつ上乗せされます。オッズはこれらから計算するので、特殊能力が「発動するかもしれない」分も織り込み済みです。実際に発動したかはレース中のカットインまでわかりません。</p></section>';
 }
 function pageHorse(id){
   const h = D.horses[id];
@@ -123,6 +125,7 @@ function pageHorse(id){
     '<header class="hero">' + horseSvg(h, 150) + '<div><p class="catch">' + esc(h.catch) + '</p><h2>' + esc(h.name) + '</h2><p class="sub">' + h.sex + h.age + ' / ' + esc(D.coats[h.coat].name) + ' / <span class="style">' + h.style + '</span> / 総合 <b class="' + gcls(ov) + '">' + ov + '(' + grade(ov) + ')</b></p></div></header>' +
     '<div class="cols"><div class="main">' +
     '<section class="box"><h3>紹介</h3><p class="lede">' + esc(h.text) + '</p><p class="kv"><span>好きなもの</span>' + esc(h.like) + '</p><p class="kv"><span>苦手なもの</span>' + esc(h.hate) + '</p></section>' +
+    (h.trait ? '<section class="box trait"><h3>特性 <small class="more">レースの強さに効きます</small></h3><p class="skname">「' + esc(h.trait.name) + '」</p><p>' + esc(h.trait.desc) + '</p></section>' : '') +
     '<section class="box"><h3>近5走</h3><div class="scroll"><table class="tbl"><thead><tr><th>日付</th><th>レース</th><th class="r">枠</th><th class="r">人気</th><th class="r">着順</th><th>騎手</th><th class="r">タイム</th><th class="r">通過</th><th class="r">着差</th></tr></thead><tbody>' +
       rs.map(r => '<tr><td>' + r.date + '</td><td>' + esc(r.race) + '</td><td class="r">' + r.gate + '</td><td class="r">' + r.pop + '</td><td class="r"><b class="pos ' + posCls(r.pos) + '">' + r.pos + '</b></td><td>' + jLink(r.jk) + '</td><td class="r">' + r.time + '秒</td><td class="r">' + r.pass + '</td><td class="r">' + r.margin + '</td></tr>').join('') + '</tbody></table></div></section>' +
     '<section class="box"><h3>血統</h3><div class="scroll"><table class="tbl ped"><tbody><tr><th rowspan="1">父</th><td colspan="2">' + esc(h.sire) + '</td></tr><tr><th rowspan="2">母</th><td rowspan="2">' + esc(h.dam) + '</td><td><small>母の父</small>' + esc(h.bms) + '</td></tr><tr><td><small>きょうだい</small>' +
@@ -155,6 +158,9 @@ function pageJockey(id){
     '<div class="cols"><div class="main">' +
     '<section class="box"><h3>紹介</h3><p class="lede">' + esc(j.text) + '</p></section>' +
     '<section class="box"><h3>人となり</h3><dl class="prof wide">' + row('趣味', j.hobby) + row('特技', j.skill) + row('好きな食べ物', j.food) + row('休日の過ごし方', j.holiday) + row('スクリーンタイム', j.screen) + row('座右の銘', j.motto) + row('最近の悩み', j.worry) + '</dl></section>' +
+    (j.ability ? '<section class="box skill"><h3>特殊能力 <small class="more">ゲームでカットインが出ます</small></h3><p class="skname">「' + esc(j.ability.name) + '」</p><p>' + esc(j.ability.desc) + '</p>' +
+      '<dl class="prof"><div><dt>発動率</dt><dd>' + esc(j.ability.when) + '</dd></div><div><dt>タイミング</dt><dd>' + ({start:'スタート直後', mid:'道中', late:'最後の直線'}[j.ability.timing] || '') + '</dd></div>' +
+      '<div><dt>効果</dt><dd>強さ×' + j.ability.m.toFixed(1) + '(基本)。期待度の色で変わります:青×' + fx(j.ability.m, 0.4) + ' / 緑×' + fx(j.ability.m, 0.8) + ' / 赤×' + fx(j.ability.m, 1.5) + ' / 金×' + fx(j.ability.m, 2.4) + ' / 虹×' + fx(j.ability.m, 4.5) + '</dd></div></dl></section>' : '') +
     (j.lines ? '<section class="box"><h3>セリフ集 <small class="more">ゲームの吹き出しで出ます</small></h3><dl class="prof wide lines">' +
       [['pick', '賭けてもらったとき'], ['start', '発走'], ['lead', '先頭に立ったとき'], ['win', '勝ったとき'], ['second', '2着のとき'], ['lose', '負けたとき']]
         .map(k => '<div><dt>' + k[1] + '</dt><dd>' + (j.lines[k[0]] || []).map(t => '「' + esc(t) + '」').join('<br>') + '</dd></div>').join('') + '</dl></section>' : '') +
