@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ファスト競馬データ</title>
+<meta name="description" content="ファスト競馬に出走する30頭と騎手10人のプロフィール、能力、近走成績、ニュース。すべて架空です。">
+<meta name="theme-color" content="#0e6b43">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="db.css?v=1">
+</head>
+<body>
+<header class="mast">
+  <div class="wrap">
+    <a class="logo" href="#">ファスト競馬<span>データ</span></a>
+    <p class="tagline">馬30頭・騎手10人。読むのに5秒以上かかる項目はありません</p>
+  </div>
+  <nav class="nav" aria-label="メニュー">
+    <div class="wrap">
+      <a href="#" data-tab="top">トップ</a>
+      <a href="#news" data-tab="news">ニュース</a>
+      <a href="#horses" data-tab="horses">競走馬</a>
+      <a href="#jockeys" data-tab="jockeys">騎手</a>
+      <a class="go" href="index.html">ゲームで賭ける</a>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap" id="view"></main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>このページの馬、騎手、調教師、馬主、レース名、記事はすべて架空で、実在のものとは関係ありません。ゲーム内で賭けられるのはゲーム内コインだけです。</p>
+  </div>
+</footer>
+
+<script src="data.js?v=1"></script>
+<script src="db.js?v=1"></script>
+</body>
+</html>

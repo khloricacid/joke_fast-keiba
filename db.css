@@ -1,0 +1,164 @@
+:root{
+  /* Layout idea: a racing-data portal on newsprint. Turf-green masthead, dense ruled tables, a main column and a narrow data rail. */
+  --paper:#edebe2;
+  --card:#f9f8f2;
+  --ink:#16130f;
+  --line:#c8c4b4;
+  --turf:#0e6b43;
+  --lamp:#d1131f;
+  --pay:#ffd60a;
+  --muted:#5d584c;
+  --font-display:"Dela Gothic One","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  --font-body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-body);font-weight:500;font-size:14px;line-height:1.65}
+a{color:#0a5a8a;text-underline-offset:2px}
+a:hover{color:var(--lamp)}
+:focus-visible{outline:3px solid var(--lamp);outline-offset:2px}
+button,input{font:inherit;color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+
+/* ---- 題字とメニュー ---- */
+.mast{background:var(--turf);color:#fff;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 48px,transparent 48px 96px)}
+.mast>.wrap{display:flex;align-items:baseline;gap:6px 18px;flex-wrap:wrap;padding-top:14px;padding-bottom:10px}
+.logo{font-family:var(--font-display);font-size:clamp(24px,6vw,34px);line-height:1;color:#fff;text-decoration:none;transform:skewX(-9deg);transform-origin:left bottom;text-shadow:3px 3px 0 var(--ink);display:inline-block}
+.logo:hover{color:#fff}
+.logo span{font-size:.55em;background:var(--pay);color:var(--ink);text-shadow:none;padding:1px 7px;margin-left:8px;vertical-align:middle}
+.tagline{margin:0;font-size:12px;font-weight:700;opacity:.9}
+.nav{background:var(--ink)}
+.nav .wrap{display:flex;gap:0;overflow-x:auto}
+.nav a{color:#fff;text-decoration:none;font-weight:900;padding:9px 16px;white-space:nowrap;border-bottom:4px solid transparent}
+.nav a:hover{color:var(--pay)}
+.nav a[aria-current="page"]{border-bottom-color:var(--pay);color:var(--pay)}
+.nav a.go{margin-left:auto;background:var(--lamp);color:#fff}
+.nav a.go:hover{background:#fff;color:var(--lamp)}
+
+main.wrap{padding-top:18px;padding-bottom:32px;min-height:60vh}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.main,.side{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+
+.box{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:12px 14px 14px}
+.box h3{font-family:var(--font-display);font-weight:400;font-size:16px;line-height:1.3;margin:0 0 10px;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.box h3 .more{font-family:var(--font-body);font-size:12px;font-weight:700}
+.pt{font-family:var(--font-display);font-weight:400;font-size:24px;line-height:1.2;margin:0 0 12px;text-wrap:balance}
+.pt small{font-family:var(--font-body);font-size:13px;font-weight:700;color:var(--muted);margin-left:6px}
+.note{font-size:12px;color:var(--muted);margin:10px 0 0}
+.crumb{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px}
+.cat{display:inline-block;font-size:11px;font-weight:900;line-height:1.5;padding:0 7px;background:var(--ink);color:#fff;white-space:nowrap}
+time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---- ニュース ---- */
+.lead a{display:block;background:var(--ink);color:#fff;text-decoration:none;padding:16px 18px;border-left:8px solid var(--lamp)}
+.lead a:hover h2{color:var(--pay)}
+.lead .cat{background:var(--pay);color:var(--ink)}
+.lead h2{font-family:var(--font-display);font-weight:400;font-size:clamp(20px,4.6vw,30px);line-height:1.3;margin:8px 0 6px;text-wrap:balance}
+.lead p{margin:0 0 6px;font-weight:700}
+.lead time{color:#cfcabb}
+.newsList{list-style:none;margin:0;padding:0}
+.newsList li{border-bottom:1px dotted var(--line)}
+.newsList li:last-child{border-bottom:0}
+.newsList a{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:7px 0;text-decoration:none;color:var(--ink)}
+.newsList a:hover .ttl{color:var(--lamp);text-decoration:underline}
+.newsList .ttl{font-weight:700}
+.newsList .ttl small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
+.newsList.big a{padding:11px 0}
+.newsList.big .ttl{font-size:16px}
+@media (max-width:520px){.newsList a{grid-template-columns:auto minmax(0,1fr)}.newsList time{grid-column:2}}
+.article{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:18px clamp(14px,4vw,32px) 22px;max-width:44em}
+.article .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0;font-size:12px;color:var(--muted)}
+.article h2{font-family:var(--font-display);font-weight:400;font-size:clamp(22px,5vw,32px);line-height:1.3;margin:10px 0;text-wrap:balance}
+.article p{margin:0 0 12px;font-size:15px}
+.lede{font-weight:700;font-size:15px;margin:0 0 10px}
+.rel{display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:12px;font-size:12px!important}
+.rel span{color:var(--muted);font-weight:700}
+.chipLink{border:1px solid var(--ink);border-radius:999px;padding:1px 10px;font-weight:700;text-decoration:none;color:var(--ink);background:#fff}
+.chipLink:hover{background:var(--ink);color:#fff}
+
+/* ---- 表 ---- */
+.scroll{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
+.tbl th,.tbl td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}
+.tbl thead th{background:var(--ink);color:#fff;font-weight:700;font-size:12px;border-bottom:0}
+.tbl tbody tr:nth-child(even){background:rgba(22,19,15,.035)}
+.tbl tbody tr:hover{background:rgba(255,214,10,.22)}
+.tbl .r{text-align:right}
+.tbl th button{background:none;border:0;padding:0;font-weight:700;color:#fff;cursor:pointer}
+.tbl th button:hover,.tbl th[aria-sort] button{color:var(--pay)}
+.tbl .nm{display:flex;align-items:center;gap:8px;font-weight:900}
+.tbl .ov{font-family:var(--font-display);font-size:15px}
+.horses{background:var(--card);border:1px solid var(--line)}
+.ped th{background:var(--ink);color:#fff;width:3em;text-align:center}
+.ped td{white-space:normal;font-weight:700}
+.ped small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
+.style{display:inline-block;font-size:11px;font-weight:900;border:1px solid currentColor;border-radius:2px;padding:0 5px;line-height:1.5}
+.pos{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:50%;font-family:var(--font-display);font-size:12px}
+.pos.p1{background:var(--lamp);color:#fff}
+.pos.p2{background:#1f5fd1;color:#fff}
+.pos.p3{background:#12a150;color:#fff}
+/* 能力の段階:S A B C D E G */
+.gS{color:#d1131f;font-weight:900}.gA{color:#c25a00;font-weight:900}.gB{color:#0e6b43;font-weight:700}.gC{color:var(--ink)}.gD{color:#5d584c}.gE{color:#8a8576}.gG{color:#8a8576;font-style:italic}
+.filter{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.filter label{font-weight:900;font-size:13px}
+.filter input{border:2px solid var(--ink);border-radius:4px;padding:6px 10px;background:#fff;min-width:0;width:200px;font-weight:700}
+.filter button{border:2px solid var(--ink);border-radius:999px;background:#fff;padding:4px 12px;font-weight:900;font-size:13px;cursor:pointer}
+.filter button[aria-pressed="true"]{background:var(--ink);color:var(--pay)}
+
+/* ---- 馬・騎手の個別ページ ---- */
+.hero{display:flex;gap:18px;align-items:center;background:var(--ink);color:#fff;padding:16px 18px;margin-bottom:16px;border-bottom:6px solid var(--pay);flex-wrap:wrap}
+.hero .hsvg,.hero .jsvg{background:var(--turf);border:3px solid #fff;flex:none;max-width:40vw;height:auto}
+.hero h2{font-family:var(--font-display);font-weight:400;font-size:clamp(26px,7vw,44px);line-height:1.15;margin:0;text-wrap:balance}
+.hero .catch{margin:0 0 2px;font-weight:900;color:var(--pay);font-size:15px}
+.hero .sub{margin:6px 0 0;font-weight:700;font-size:13px}
+.hero .gS,.hero .gA,.hero .gB,.hero .gC,.hero .gD,.hero .gE,.hero .gG{color:var(--pay)}
+.hsvg,.jsvg{display:block;flex:none}
+.kv{display:grid;grid-template-columns:8.5em minmax(0,1fr) auto;gap:8px;align-items:baseline;margin:0;padding:5px 0;border-top:1px dotted var(--line)}
+.kv span:first-child{font-size:12px;font-weight:900;color:var(--muted)}
+.kv span+span{grid-column:2/-1}
+.kv b{font-family:var(--font-display);font-weight:400}
+.prof{margin:0;display:grid}
+.prof div{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:8px;padding:6px 0;border-top:1px dotted var(--line)}
+.prof div:first-child{border-top:0}
+.prof dt{font-size:12px;font-weight:900;color:var(--muted)}
+.prof dd{margin:0;font-weight:700}
+.prof.wide div{grid-template-columns:9em minmax(0,1fr)}
+@media (max-width:520px){.prof.wide div{grid-template-columns:minmax(0,1fr);gap:0}}
+.radar{display:block;width:100%;max-width:240px;margin:0 auto 6px}
+.radar text{font-size:10px;font-weight:700;fill:var(--ink);font-family:var(--font-body)}
+.rgrid{fill:none;stroke:var(--line);stroke-width:1}
+.rfill{fill:rgba(209,19,31,.28);stroke:var(--lamp);stroke-width:2}
+.bars{margin:0;display:grid;gap:5px}
+.bars div{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:8px;align-items:center}
+.bars dt{font-size:12px;font-weight:900}
+.bars dd{margin:0;display:grid;grid-template-columns:minmax(0,1fr) 1.2em 2.2em;gap:6px;align-items:center}
+.bar{height:10px;background:rgba(22,19,15,.1);display:block}
+.bar i{display:block;height:100%;background:currentColor}
+.bars b{font-family:var(--font-display);font-weight:400;text-align:center}
+.bars .num{text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
+.jcard a{display:flex;gap:10px;align-items:center;text-decoration:none;color:var(--ink)}
+.jcard b{display:block;font-size:16px}
+.jcard em{font-style:normal;font-size:12px;color:var(--muted)}
+.play{display:block;background:var(--lamp);color:#fff;text-decoration:none;font-family:var(--font-display);font-size:17px;line-height:1.3;padding:12px 14px;text-align:center;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+.play:hover{background:var(--pay);color:var(--ink)}
+.play small{display:block;font-family:var(--font-body);font-size:11px;font-weight:700}
+.pager{display:flex;justify-content:space-between;gap:10px;margin-top:16px;font-weight:900}
+
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pick{display:grid;gap:2px;justify-items:start;text-decoration:none;color:var(--ink);background:#fff;border:1px solid var(--line);padding:10px}
+.pick:hover{border-color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
+.pick .hsvg{background:var(--turf);width:100%;height:auto}
+.pick b{font-weight:900}
+.pick span{font-size:12px;color:var(--muted)}
+.pick em{font-style:normal;font-family:var(--font-display);font-size:13px}
+.jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.jc{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);padding:12px;text-decoration:none;color:var(--ink)}
+.jc:hover{box-shadow:4px 4px 0 var(--ink)}
+.jc b{display:block;font-size:18px;font-weight:900;line-height:1.3}
+.jc small{display:block;font-size:12px;color:var(--muted)}
+.jc em{display:block;font-style:normal;font-weight:700;margin:4px 0}
+.jc p{margin:0;display:flex;gap:4px 12px;flex-wrap:wrap;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+
+.foot{background:var(--ink);color:#cfcabb;font-size:12px;padding:14px 0}
+.foot p{margin:0;max-width:60em}

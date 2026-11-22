@@ -61,11 +61,12 @@ body.shake2 .hud{animation:shake .45s linear 2}
 .wallet span{display:block;font-size:10px;font-weight:700;opacity:.85}
 .wallet b{font-family:var(--font-display);font-weight:400;font-size:clamp(22px,6vw,32px);color:var(--pay);font-variant-numeric:tabular-nums;display:inline-block}
 .wallet.bump b{animation:bump .25s ease-out}
-.tools{display:flex;gap:6px}
-.tools button{
+.tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tools button,.tools .toolLink{
   border:1px solid rgba(246,244,236,.55);background:rgba(10,14,36,.55);border-radius:4px;padding:5px 9px;
   font-size:12px;font-weight:700;min-height:32px;white-space:nowrap;
 }
+.tools .toolLink{display:inline-grid;place-items:center;text-decoration:none;color:var(--ink);background:var(--pay);border-color:var(--pay)}
 .tools button[aria-pressed="false"]:not(#btnRoom){opacity:.55}
 .tools #btnRoom[aria-pressed="true"]{background:var(--rail);color:var(--ink)}
 
@@ -168,6 +169,7 @@ body.is-run .sheet,body.is-res .sheet{transform:translateY(105%);pointer-events:
 .uma .shirushi{font-size:16px;font-weight:900;height:18px;line-height:18px}
 .uma .name{writing-mode:vertical-rl;font-weight:900;font-size:14px;letter-spacing:.03em;line-height:1.15;height:9.5em;white-space:nowrap}
 .uma .style{font-size:10px;font-weight:700;border:1px solid currentColor;padding:0 4px;border-radius:2px;line-height:1.5}
+.uma .jk{font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;max-width:100%;overflow:hidden}
 .uma .odds{font-family:var(--font-display);font-size:clamp(16px,4.4vw,24px);line-height:1;color:#d1131f;font-variant-numeric:tabular-nums}
 .uma .odds small{font-family:var(--font-body);font-weight:700;font-size:10px;color:var(--ink);margin-left:1px}
 .uma .votes{display:flex;gap:2px;height:9px;justify-content:center}

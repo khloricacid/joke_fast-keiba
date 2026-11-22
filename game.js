@@ -23,6 +23,7 @@ const NAMES = [
   'バクソクセッカチ','キドクスルー','ワンタップオー','ミッカボウズ','ヒマツブシオー','アトゴフンダケ',
   'シュウチュウゼロ','ネムクナイモン','マタアシタヤル','レンダノオニ','トバシミジョウズ','イマスグホシイ'
 ];
+const DATA = window.FK_DATA || null;      // 馬と騎手の設定(data.js)。無くてもレースは成立する
 const STAMPS = ['うおおお','草','は?','神','差せ!','そのまま!'];
 const TITLES = ['ドパ見習い','ショート民','倍速視聴者','タイパの鬼','スワイプ職人','通知の申し子','脳汁ソムリエ','ドパミン長者','ファスト王','ドパ神'];
 const ACH = {
@@ -54,7 +55,7 @@ function buildRace(seed){
   const hs = []; let sum = 0;
   for (let i = 0; i < 6; i++) {
     const x = r(); const w = 1 + x * x * x * 13; sum += w;
-    hs.push({no:i + 1, name:NAMES[idx[i]], w, coat:Math.floor(r() * COATS.length), mark:''});
+    hs.push({no:i + 1, id:idx[i], name:NAMES[idx[i]], w, coat:Math.floor(r() * COATS.length), mark:'', jk:''});
   }
   for (const h of hs) { h.p = h.w / sum; h.odds = Math.min(99.9, Math.max(1.1, Math.round(0.94 / h.p * 10) / 10)); }
   const fav = hs.slice().sort((a, b) => (b.p - a.p) || (a.no - b.no));
@@ -72,10 +73,20 @@ function buildRace(seed){
     hs[no - 1].T = T; hs[no - 1].rank = i + 1;
   });
   for (const h of hs) {
-    const s = r();
-    h.k = 0.9 + s * 0.25;
-    h.style = s < 0.25 ? '逃げ' : s < 0.5 ? '先行' : s < 0.78 ? '差し' : '追込';
+    const s = r(), fixed = DATA ? DATA.horses[h.id].style : '';
+    // 脚質と毛色は馬ごとに決まっている。着順には影響せず、道中の位置取りだけが変わる
+    h.style = fixed || (s < 0.25 ? '逃げ' : s < 0.5 ? '先行' : s < 0.78 ? '差し' : '追込');
+    h.k = fixed ? {'逃げ':0.9, '先行':0.965, '差し':1.03, '追込':1.09}[fixed] + s * 0.06 : 0.9 + s * 0.25;
+    if (DATA) h.coat = DATA.horses[h.id].coat;
     h.amp = 0.012 + r() * 0.02; h.fq = 1 + r() * 1.5; h.ph = r() * 6.28;
+  }
+  if (DATA) {                              // 騎手:主戦が空いていれば主戦、かぶったら代打
+    const used = new Set();
+    for (const h of hs) {
+      let j = DATA.horses[h.id].jk.find(x => !used.has(x));
+      if (j === undefined) j = DATA.jockeys.findIndex((_, x) => !used.has(x));
+      used.add(j); h.jk = DATA.jockeys[j].name.replace(' ', '');
+    }
   }
   const gold = r() < 0.12;                 // ゴールデンレース:払戻2倍
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
@@ -1059,7 +1070,7 @@ function cutIn(L){
   if (calm()) return;
   const el = $('cutin'), h = V.race.hs[L.h - 1], no = $('cutNo');
   no.textContent = String(L.h); no.style.background = FRAME[L.h - 1].bg; no.style.color = FRAME[L.h - 1].fg;
-  $('cutName').textContent = h.name;
+  $('cutName').textContent = h.name + (h.jk ? '(' + h.jk + ')' : '');
   $('cutSay').textContent = L.all ? '全ツッパ!!' : h.odds >= 15 ? '大穴いけ!!' : '行け!!';
   el.className = ''; void el.offsetWidth; el.className = L.all ? 'go all' : 'go';
 }
@@ -1075,16 +1086,17 @@ function renderRound(){
     b.type = 'button'; b.className = 'uma' + (h.odds >= 15 ? ' ana' : ''); b.id = 'uma' + h.no;
     b.style.setProperty('--i', String(i));
     b.setAttribute('aria-pressed', 'false');
-    b.setAttribute('aria-label', h.no + '番 ' + h.name + ' ' + h.style + ' 単勝' + h.odds.toFixed(1) + '倍');
+    b.setAttribute('aria-label', h.no + '番 ' + h.name + ' ' + h.style + (h.jk ? ' 騎手' + h.jk : '') + ' 単勝' + h.odds.toFixed(1) + '倍');
     const waku = document.createElement('span'); waku.className = 'waku'; waku.textContent = String(h.no);
     waku.style.background = FRAME[h.no - 1].bg; waku.style.color = FRAME[h.no - 1].fg;
     const sh = document.createElement('span'); sh.className = 'shirushi'; sh.textContent = h.mark;
     const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = h.name;
     const st = document.createElement('span'); st.className = 'style'; st.textContent = h.style;
+    const jk = document.createElement('span'); jk.className = 'jk'; jk.textContent = h.jk;
     const od = document.createElement('span'); od.className = 'odds'; od.textContent = h.odds.toFixed(1);
     const sm = document.createElement('small'); sm.textContent = '倍'; od.appendChild(sm);
     const vt = document.createElement('span'); vt.className = 'votes';
-    b.append(waku, sh, nm, st, od, vt);
+    b.append(waku, sh, nm, st, jk, od, vt);
     b.addEventListener('click', () => pick(h.no));
     return b;
   });
