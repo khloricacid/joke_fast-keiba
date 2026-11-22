@@ -655,7 +655,7 @@ function myLg(bet){
   const a = allinP(bet), r = S.rush > 0 ? RUSH_P : 0;
   return Math.round((1 - (1 - a) * (1 - r)) * 1000);
 }
-const legendPct = lg => Math.round((lg / 1000 + LEGEND_BASE) * 100);
+const legendPct = lg => Math.min(100, Math.round((lg / 1000 + LEGEND_BASE) * 100));
 function stakeNow(){ return S.bet === 'all' ? S.coins : Math.min(S.bet, S.coins); }
 function myHorseNo(){
   if (V.locked) return V.locked.h;
@@ -838,6 +838,20 @@ function sPuchun(){   // パチンコの暗転「プチュン!」
 }
 function sHeart(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 60, t, 0.18, 1, 38); tone(A.sfx, 'sine', 54, t + 0.2, 0.18, 0.8, 36); } }
 function sHit(k){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 110 - k * 15, t, 0.5, 1, 35); hiss(A.sfx, t, 0.5, 0.5, 'bandpass', 900 + k * 400, 0.8, 200); tone(A.sfx, 'square', mtof(84 + k * 5), t, 0.3, 0.12); } }
+// 伝説の「タメ」:音が水の中に沈むように遠のき、低いうなりが下りていく
+function sTame(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 220, t, 0.75, 0.07, 48); tone(A.sfx, 'sine', 110, t, 0.75, 0.5, 30); } if (A.ctx) A.mfilt.frequency.setTargetAtTime(220, A.ctx.currentTime, 0.12); }
+// 暗闇の「ゴゴゴゴ」:だんだん大きく、高くなる地鳴り
+function sRumble(dur){
+  if (!sfxOK()) return;
+  const ctx = A.ctx, t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  s.buffer = A.noise; s.loop = true; f.type = 'lowpass'; f.Q.value = 3;
+  f.frequency.setValueAtTime(70, t); f.frequency.exponentialRampToValueAtTime(520, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + dur * 0.92); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.08);
+  s.connect(f); f.connect(g); g.connect(A.sfx); s.start(t); s.stop(t + dur + 0.12);
+  tone(A.sfx, 'sine', 32, t, dur, 0.6, 46);
+}
+// 文字が叩きつけられる重低音
+function sBoom(k){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 75 - k * 10, t, 1.1 + k * 0.4, 1, 26); tone(A.sfx, 'triangle', 150, t, 0.25, 0.5, 40); hiss(A.sfx, t, 0.9 + k * 0.3, 0.9, 'lowpass', 700, 0.7, 60); } }
 function sLegendChord(){ if (sfxOK()) { const t = A.ctx.currentTime; [60, 64, 67, 72, 76, 79, 84, 88, 91, 96].forEach((n, i) => { tone(A.sfx, 'sawtooth', mtof(n), t + i * 0.03, 1.2, 0.05); tone(A.sfx, 'square', mtof(n + 12), t + i * 0.03, 0.4, 0.03); }); } }
 function sOmen(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 300, t, 0.7, 0.14, 2600); tone(A.sfx, 'square', 600, t, 0.7, 0.06, 5200); [84, 88, 91, 96].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.7 + i * 0.05, 0.18, 0.09)); } }
 function sChance(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', mtof(79), t, 0.08, 0.1); tone(A.sfx, 'square', mtof(86), t + 0.09, 0.14, 0.1); } }
@@ -1475,7 +1489,7 @@ function startOmen(now){
 }
 // そのレースで止めている(止めた)時間。進行役が待ち時間に足す
 function pauseFor(n){ return n && n === V.n ? Math.round(V.pauseTotal + (V.pauseUntil ? V.pauseLen : 0) + (V.hold || 0)) : 0; }
-const LEGEND_MS = 3300, RESCUE_MS = 4600;
+const LEGEND_MS = 3300, LEGEND_PRE = 700, LEGEND_MAIN = 3900, RESCUE_MS = 4600;
 // プチュン!と画面が十字に消えて完全に暗転し、2文字が叩きつけられてから光で戻ってくる。伝説と馬主の救済で共用
 function blackout(o){
   const quiet = calm(), D = o.ms, k = D / LEGEND_MS;
@@ -1495,9 +1509,10 @@ function blackout(o){
   const at = (ms, fn) => setTimeout(fn, ms);
   at(380, () => { B.add('crt-hide'); B.remove('crt-off', 'crt-fade'); });
   at(700, () => sHeart()); at(1100, () => sHeart());
+  if (o.heavy) at(420, () => sRumble((1300 * k - 420) / 1000));
   at(900, () => { if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 3200, t, 0.5, 0.08, 5200); hiss(A.sfx, t, 0.4, 0.15, 'highpass', 6000, 2); } });
-  at(1300 * k, () => { sHit(0); buzz(60); });
-  at(1560 * k, () => { sHit(1); buzz(80); });
+  at(1300 * k, () => { sHit(0); if (o.heavy) sBoom(0); buzz(o.heavy ? [120] : 60); });
+  at(1560 * k, () => { sHit(1); if (o.heavy) sBoom(1); buzz(o.heavy ? [200] : 80); });
   at(1850 * k, () => { sLegendChord(); buzz([100, 50, 100, 50, 200]); if (o.speak) speak(o.speak, true); });
   at(2800 * k, () => {
     B.remove('crt-hide'); B.add(quiet ? 'crt-fadein' : 'crt-on');
@@ -1509,13 +1524,19 @@ function blackout(o){
   at(D, () => { B.remove('legend-bg', 'crt-on', 'crt-fadein'); el.className = ''; if (o.end) o.end(); });
 }
 function startLegend(h, now){
-  const sk = h.skill;
+  const sk = h.skill, total = LEGEND_PRE + LEGEND_MAIN, B = document.body.classList;
   V.legendOn = true; V.omenShown = true;
-  V.pauseStart = now; V.pauseUntil = now + LEGEND_MS; V.pauseLen = LEGEND_MS; dirty = true;
+  V.pauseStart = now; V.pauseUntil = now + total; V.pauseLen = total; dirty = true;
   $('skillin').className = ''; $('omen').className = '';
   addSpent(0);
-  blackout({ms:LEGEND_MS, c:['伝', '説'], who:sk.jockey + '(' + h.no + '番 ' + h.name + ')', name:'「' + sk.name + '」', hue:(sk.jki * 37 + 12) % 360,
-    speak:sk.jockey + 'の、' + sk.name + '!', reveal:() => castSay(h.no + '番 ' + h.name + '、伝説の末脚!', true)});
+  // タメ:時間が止まり、色が抜けて音が遠のく。そのあとプチュン
+  B.add('legend-pre'); sTame(); sHeart(); setTimeout(sHeart, 380); buzz([40, 300, 40]);
+  setTimeout(() => {
+    B.remove('legend-pre');
+    if (A.ctx) A.mfilt.frequency.setTargetAtTime(15000, A.ctx.currentTime, 0.05);
+    blackout({ms:LEGEND_MAIN, cls:'heavy', heavy:true, c:['伝', '説'], who:sk.jockey + '(' + h.no + '番 ' + h.name + ')', name:'「' + sk.name + '」', hue:(sk.jki * 37 + 12) % 360,
+      speak:sk.jockey + 'の、' + sk.name + '!', reveal:() => castSay(h.no + '番 ' + h.name + '、伝説の末脚!', true)});
+  }, LEGEND_PRE);
 }
 // 破産したとき1%で、賭けていた馬の馬主が現れてコインをくれる
 const RESCUE_LINE = 'こんなところでへこたれてはだめだ';

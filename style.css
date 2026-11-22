@@ -725,6 +725,31 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 #legend.go .lgWho{animation:lgName var(--lgD,3.3s) linear both}
 #legend.go .lgName{animation:lgName var(--lgD,3.3s) linear both,slide 1s linear infinite}
 @keyframes lgName{0%,55%{opacity:0;transform:translateY(16px)}60%,82%{opacity:1;transform:none}90%,100%{opacity:0}}
+/* 伝説の重厚感:タメ(時間停止・色抜け)→暗闇の地鳴り「ゴゴゴ」→文字が叩きつけられて画面が揺れ、衝撃波が走る */
+body.legend-pre #gl,body.legend-pre #fx,body.legend-pre .hud{transition:filter .5s ease-in;filter:saturate(0) brightness(.45) contrast(1.35)}
+body.legend-pre #gl{transition:filter .5s ease-in,transform .7s ease-in;transform:scale(1.06)}
+body.legend-pre #vig{opacity:1;animation:none;box-shadow:inset 0 0 160px 60px #000}
+#legend .gogo,#legend .wave{display:none}
+#legend.heavy .gogo{display:block;position:absolute;inset:0}
+#legend.heavy .gogo b{position:absolute;font-family:var(--font-display);font-weight:400;font-size:clamp(34px,9vw,84px);color:#5a4a7a;opacity:0;-webkit-text-stroke:2px #b9a6ff;text-shadow:0 0 18px rgba(150,110,255,.7)}
+#legend.heavy .gogo b:nth-child(1){left:8%;top:16%}#legend.heavy .gogo b:nth-child(2){left:20%;top:30%;font-size:clamp(26px,7vw,64px)}
+#legend.heavy .gogo b:nth-child(3){right:10%;top:20%}#legend.heavy .gogo b:nth-child(4){right:22%;top:34%;font-size:clamp(26px,7vw,64px)}
+#legend.heavy .gogo b:nth-child(5){left:12%;bottom:22%}#legend.heavy .gogo b:nth-child(6){right:12%;bottom:20%}
+#legend.heavy.go .gogo b{animation:lgGogo var(--lgD,3.9s) linear both,lgJit .07s steps(2) infinite}
+#legend.heavy.go .gogo b:nth-child(even){animation-delay:0s,.035s}
+@keyframes lgGogo{0%,12%{opacity:0;transform:scale(.6)}20%{opacity:.5}34%{opacity:1;transform:scale(1.15)}39%{opacity:1}42%,100%{opacity:0;transform:scale(1.5)}}
+@keyframes lgJit{0%{translate:-2px 1px}100%{translate:2px -1px}}
+#legend.heavy .wave{display:block;position:absolute;left:50%;top:44%;width:40vmin;height:40vmin;margin:-20vmin 0 0 -20vmin;border-radius:50%;border:6px solid rgba(255,240,200,.9);opacity:0;box-shadow:0 0 30px rgba(255,214,10,.8),inset 0 0 30px rgba(255,214,10,.6)}
+#legend.heavy.go .w1{animation:lgWave1 var(--lgD,3.9s) linear both}
+#legend.heavy.go .w2{animation:lgWave2 var(--lgD,3.9s) linear both}
+@keyframes lgWave1{0%,41%{opacity:0;transform:scale(.2)}42%{opacity:1;transform:scale(.4)}49%{opacity:0;transform:scale(4.5)}100%{opacity:0}}
+@keyframes lgWave2{0%,49%{opacity:0;transform:scale(.2)}50%{opacity:1;transform:scale(.4)}58%{opacity:0;transform:scale(6)}100%{opacity:0}}
+#legend.heavy.go{animation:lgBg var(--lgD,3.9s) linear forwards,lgShake var(--lgD,3.9s) linear both}
+@keyframes lgShake{0%,41.5%{transform:none}42%{transform:translate(-16px,12px)}43%{transform:translate(13px,-10px)}44%{transform:translate(-9px,7px)}45%{transform:translate(5px,-3px)}46%,49.5%{transform:none}50%{transform:translate(-24px,16px) rotate(-.6deg)}51%{transform:translate(19px,-14px) rotate(.5deg)}52%{transform:translate(-12px,9px)}53%{transform:translate(7px,-5px)}54%{transform:translate(-3px,2px)}55%,100%{transform:none}}
+#legend.heavy .chars b{-webkit-text-stroke:4px #fff;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,214,10,.8)) drop-shadow(8px 10px 0 #3a1a00)}
+#legend.calm.heavy.go{animation:lgBg var(--lgD,3.9s) linear forwards}
+#legend.calm.heavy .gogo,#legend.calm.heavy .wave{display:none}
+body.calm.legend-pre #gl{transform:none}
 /* 馬主の救済:セリフを読めるように長めに出す */
 #legend.owner .chars b{background:linear-gradient(180deg,#fff 10%,#ffe9a8 40%,#e8b23a 70%,#9a6a10);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,190,60,.85))}
 #legend.owner .lgName{font-size:clamp(15px,4.6vw,42px);padding:0 3vw;line-height:1.25;animation:lgOwn var(--lgD,4.6s) linear both,slide 1s linear infinite}
@@ -759,6 +784,9 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 @media (prefers-reduced-motion:reduce){
   body.crt-off #gl,body.crt-off #fx,body.crt-off .hud,body.crt-off #frame,body.crt-on #gl,body.crt-on #fx,body.crt-on .hud,body.crt-on #frame{animation:none}
   #legend.owner .owPalmGlow{animation:none}
+  #legend.heavy.go{animation:lgBg var(--lgD,3.9s) linear forwards}
+  #legend.heavy .gogo b{animation-iteration-count:1!important}
+  body.legend-pre #gl{transform:none}
   #legend .lgRays{animation:lgRays 3.3s linear both}
   #legend .chars b,#legend .lgName{animation-iteration-count:1!important}
 }
