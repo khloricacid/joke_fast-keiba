@@ -9,8 +9,8 @@ const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // 枠番の色(1白 2黒 3赤 4青 5黄 6緑)
 const FRAME = [
-  {bg:'#f7f7f2',fg:'#16130f'},{bg:'#1b1b1b',fg:'#ffffff'},{bg:'#e5252c',fg:'#ffffff'},
-  {bg:'#1f5fd1',fg:'#ffffff'},{bg:'#ffd60a',fg:'#16130f'},{bg:'#12a150',fg:'#ffffff'}
+  {bg:'#f7f7f2',fg:'#16130f',glow:0xffffff},{bg:'#1b1b1b',fg:'#ffffff',glow:0x9a8cff},{bg:'#e5252c',fg:'#ffffff',glow:0xff3b45},
+  {bg:'#1f5fd1',fg:'#ffffff',glow:0x3d8bff},{bg:'#ffd60a',fg:'#16130f',glow:0xffd60a},{bg:'#12a150',fg:'#ffffff',glow:0x2dff8a}
 ];
 const COATS = [
   {body:'#8a5230',dark:'#3d2210'},{body:'#4a342a',dark:'#1c1310'},{body:'#c2905c',dark:'#6e4c2b'},
@@ -24,7 +24,14 @@ const NAMES = [
   'シュウチュウゼロ','ネムクナイモン','マタアシタヤル','レンダノオニ','トバシミジョウズ','イマスグホシイ'
 ];
 const STAMPS = ['うおおお','草','は?','神','差せ!','そのまま!'];
+const TITLES = ['ドパ見習い','ショート民','倍速視聴者','タイパの鬼','スワイプ職人','通知の申し子','脳汁ソムリエ','ドパミン長者','ファスト王','ドパ神'];
+const ACH = {
+  first:'初的中', streak3:'3連勝', streak5:'5連勝', big10:'大穴ハンター(10倍以上を的中)', big30:'万馬券ハンター(30倍以上を的中)',
+  allin:'全ツッパ成功', nose:'ハナ差で的中', closer:'追込一気', bust:'はじめての破産', rich:'1万コイン到達', rich2:'10万コイン到達',
+  gold:'ゴールデンレース的中', quick:'秒で決断して的中'
+};
 const GRACE_MS = 5000;                  // 最初の1人が賭けてから締切までの時間
+const QUICK_MS = 2000;                  // この時間内に賭けると「秒で決断」ボーナス
 const KEY = 'fastkeiba.v2';
 const TL = 260;                         // コースの長さ
 const SL_PRE = 0.45, SL_POST = 0.07, SL_RATE = 0.3;   // ゴール前スローモーション
@@ -70,9 +77,10 @@ function buildRace(seed){
     h.style = s < 0.25 ? '逃げ' : s < 0.5 ? '先行' : s < 0.78 ? '差し' : '追込';
     h.amp = 0.012 + r() * 0.02; h.fq = 1 + r() * 1.5; h.ph = r() * 6.28;
   }
+  const gold = r() < 0.12;                 // ゴールデンレース:払戻2倍
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
   const tWin = hs[order[0] - 1].T, a = tWin - SL_PRE, slowDisp = (SL_PRE + SL_POST) / SL_RATE;
-  return {seed, hs, order, margin, photo:gap1 < 0.05, tWin, a, slowDisp,
+  return {seed, hs, order, margin, gold, photo:gap1 < 0.05, tWin, a, slowDisp,
     tSettle:a + SL_PRE / SL_RATE,                         // 画面上で1着がゴールする時刻
     dur:T + 0.3 + slowDisp - (SL_PRE + SL_POST)};         // 画面上のレース時間
 }
@@ -90,7 +98,7 @@ function prog(h, tau){
 }
 
 /* ================= 保存する自分の状態 ================= */
-const S = {coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, streak:0, best:1000, busts:0};
+const S = {coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, calm:false, streak:0, best:1000, busts:0, xp:0, ach:{}};
 function clean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁯]/g, '').slice(0, 10); }
 function adopt(d){
   if (!d || typeof d !== 'object') return;
@@ -98,50 +106,56 @@ function adopt(d){
   if (typeof d.nick === 'string' && clean(d.nick)) S.nick = clean(d.nick);
   if (Number.isFinite(d.hue)) S.hue = ((Math.floor(d.hue) % 360) + 360) % 360;
   if (d.bet === 'all' || d.bet === 10 || d.bet === 100 || d.bet === 500) S.bet = d.bet;
-  if (typeof d.bgm === 'boolean') S.bgm = d.bgm;
-  if (typeof d.sfx === 'boolean') S.sfx = d.sfx;
+  for (const k of ['bgm', 'sfx', 'calm']) if (typeof d[k] === 'boolean') S[k] = d[k];
+  if (Number.isFinite(d.xp)) S.xp = clamp(Math.floor(d.xp), 0, 1e9);
+  if (d.ach && typeof d.ach === 'object') for (const k of Object.keys(ACH)) if (d.ach[k]) S.ach[k] = true;
   if (Number.isFinite(d.streak)) S.streak = Math.max(0, Math.floor(d.streak));
   if (Number.isFinite(d.best)) S.best = Math.max(S.coins, Math.floor(d.best));
   if (Number.isFinite(d.busts)) S.busts = Math.max(0, Math.floor(d.busts));
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 const streakMult = s => s >= 2 ? 1.5 : s === 1 ? 1.2 : 1;
+const xpNeed = l => 60 * l * (l + 1) / 2;                 // レベル l+1 になるのに必要な累計
+function lvOf(xp){ let l = 1; while (l < 99 && xp >= xpNeed(l)) l++; return l; }
+const titleOf = l => TITLES[Math.min(TITLES.length - 1, l - 1)];
+const calm = () => reduced || S.calm;
 
 /* ================= ゲーム進行 ================= */
 const PID = Array.from({length:12}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
-const me = {pick:null, sit:false, missed:0, away:document.hidden, g:null, emo:null};
+const me = {pick:null, sit:false, missed:0, away:document.hidden, g:null, emo:null, win:null};
 const V = {n:0, seed:-1, ph:'idle', race:null, betStart:0, firstPick:0, raceStart:0, settled:false, settledAt:0, late:false, locked:null, res:null,
-  lead:0, slow:false, stretch:false, myRank:0};
+  lead:0, slow:false, stretch:false, myRank:0, quick:false, calloutAt:0, payAnim:null};
 let lastG = null, hostPhaseAt = 0, hostFirstPick = 0, dirty = false, lastSent = 0;
 let net = null, roomCode = 'lobby', netOpts = null;
-const others = new Map(), linkPid = new Map(), seenPeers = new Set(), emoSeen = new Map();
+const others = new Map(), linkPid = new Map(), seenPeers = new Set(), emoSeen = new Map(), winSeen = new Map();
 
 const isInt = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
 const vG = g => (g && typeof g === 'object' && isInt(g.n, 1, 1e9) && isInt(g.seed, 0, 4294967295) && (g.ph === 'bet' || g.ph === 'run') && Number.isFinite(g.hs)) ? {n:g.n, seed:g.seed, ph:g.ph, hs:g.hs} : null;
 const vPick = p => (p && typeof p === 'object' && isInt(p.n, 1, 1e9) && isInt(p.s, 0, 4294967295) && isInt(p.h, 1, 6) && isInt(p.bet, 1, 1e12)) ? {n:p.n, s:p.s, h:p.h, bet:p.bet} : null;
 const vEmo = e => (e && typeof e === 'object' && isInt(e.k, 0, STAMPS.length - 1) && Number.isFinite(e.t)) ? {k:e.k, t:e.t} : null;
+const vWin = w => (w && typeof w === 'object' && Number.isFinite(w.t) && isInt(w.pay, 1, 1e12) && isInt(w.tier, 1, 4)) ? {t:w.t, pay:w.pay, tier:w.tier} : null;
 const newSeed = () => (Math.random() * 4294967296) >>> 0;
 
 function myState(){
-  return {pid:PID, fk:2, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak,
-    pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo};
+  return {pid:PID, fk:3, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp),
+    pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
   dirty = false; lastSent = performance.now();
   if (net) { try { net.send(myState()); } catch (e) {} }
 }
 function players(now){
-  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak,
-    pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo}];
+  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp),
+    pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win}];
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
     const s = o.st;
-    if (!s || s.fk !== 2) continue;
+    if (!s || s.fk !== 3) continue;
     out.push({peer:pid, isMe:false, nick:clean(s.nick) || 'ななし',
       hue:Number.isFinite(s.hue) ? ((Math.floor(s.hue) % 360) + 360) % 360 : 0,
       coins:Number.isFinite(s.coins) ? clamp(Math.floor(s.coins), 0, 1e12) : 0,
-      streak:isInt(s.streak, 0, 1e6) ? s.streak : 0,
-      pick:vPick(s.pick), sit:!!s.sit, away:!!s.away, g:vG(s.g), emo:vEmo(s.emo)});
+      streak:isInt(s.streak, 0, 1e6) ? s.streak : 0, lv:isInt(s.lv, 1, 99) ? s.lv : 1,
+      pick:vPick(s.pick), sit:!!s.sit, away:!!s.away, g:vG(s.g), emo:vEmo(s.emo), win:vWin(s.win)});
   }
   return out;
 }
@@ -195,7 +209,7 @@ function drive(ps, now){
     }
   } else {
     const dur = (V.race && V.seed === g.seed ? V.race.dur : 6.5) * 1000;
-    if (el >= dur + (visible.length > 1 ? 2600 : 2000)) {
+    if (el >= dur + (visible.length > 1 ? 3200 : 2700)) {
       me.g = {n:g.n + 1, seed:newSeed(), ph:'bet', hs:g.hs}; hostPhaseAt = now; dirty = true;
     }
   }
@@ -206,7 +220,7 @@ function observe(g, now){
     if (V.ph === 'run' && !V.settled) settle(true);
     V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed);
     V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
-    V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0;
+    V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0; V.quick = false; V.payAnim = null;
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
     renderRound();
@@ -216,12 +230,14 @@ function observe(g, now){
 }
 function startRace(now){
   V.ph = 'run'; V.raceStart = now;
+  const R = V.race;
   if (me.pick) {
     const bet = Math.min(me.pick.bet, S.coins);
     if (bet > 0) {
-      const mult = streakMult(S.streak);
-      V.locked = {h:me.pick.h, bet, odds:V.race.hs[me.pick.h - 1].odds, mult, all:bet >= S.coins};
+      const sm = streakMult(S.streak), qm = V.quick ? 1.1 : 1, gm = R.gold ? 2 : 1;
+      V.locked = {h:me.pick.h, bet, odds:R.hs[me.pick.h - 1].odds, mult:Math.round(sm * qm * gm * 100) / 100, quick:V.quick, all:bet >= S.coins};
       S.coins -= bet;
+      addXp(10);
     }
     me.missed = 0;
   } else {
@@ -231,8 +247,11 @@ function startRace(now){
   dirty = true;
   setText($('caster'), 'スタートしました!');
   kick3D(1);
-  flash(false);
-  sGate();
+  flash('');
+  ring(0.5, 0.5, '#ffffff');
+  if (V.locked) cutIn(V.locked);
+  sGate(); sWhoosh();
+  buzz([30, 30, 70]);
   audioMode(1);
 }
 function settle(forced){
@@ -240,14 +259,31 @@ function settle(forced){
   const R = V.race, win = R.order[0];
   let res = null;
   if (V.locked) {
-    if (V.locked.h === win) {
-      const pay = Math.floor(V.locked.bet * V.locked.odds * V.locked.mult);
+    const L = V.locked, h = R.hs[L.h - 1];
+    if (L.h === win) {
+      const pay = Math.floor(L.bet * L.odds * L.mult), m = pay / L.bet;
+      const tier = m >= 30 ? 4 : m >= 10 ? 3 : m >= 5 ? 2 : 1;
       S.coins = Math.min(1e12, S.coins + pay); S.streak++;
-      res = {type:'win', pay, odds:V.locked.odds, mult:V.locked.mult};
+      res = {type:'win', pay, odds:L.odds, mult:L.mult, tier};
+      me.win = {t:Date.now(), pay, tier};
+      addXp(20 + Math.min(120, Math.round(L.odds * 6)));
+      unlock('first');
+      if (S.streak >= 3) unlock('streak3');
+      if (S.streak >= 5) unlock('streak5');
+      if (L.odds >= 10) unlock('big10');
+      if (L.odds >= 30) unlock('big30');
+      if (L.all && L.bet >= 500) unlock('allin');
+      if (R.photo) unlock('nose');
+      if (h.style === '追込') unlock('closer');
+      if (R.gold) unlock('gold');
+      if (L.quick) unlock('quick');
+      if (S.coins >= 10000) unlock('rich');
+      if (S.coins >= 100000) unlock('rich2');
     } else {
       S.streak = 0;
-      res = {type:'lose', bet:V.locked.bet, rank:R.hs[V.locked.h - 1].rank};
-      if (S.coins <= 0) { S.coins = 1000; S.busts++; res.bust = true; }
+      res = {type:'lose', bet:L.bet, rank:h.rank};
+      if (h.rank === 2) addXp(5);
+      if (S.coins <= 0) { S.coins = 1000; S.busts++; res.bust = true; unlock('bust'); }
     }
     S.best = Math.max(S.best, S.coins);
     save();
@@ -268,13 +304,38 @@ function tick(){
   if (g) observe(g, now);
   for (const p of ps) {
     if (p.isMe) continue;
-    const t = p.emo ? p.emo.t : undefined;
-    if (!seenPeers.has(p.peer)) seenPeers.add(p.peer);
-    else if (p.emo && emoSeen.get(p.peer) !== t) shout(STAMPS[p.emo.k], p.hue);
-    emoSeen.set(p.peer, t);
+    const t = p.emo ? p.emo.t : undefined, w = p.win ? p.win.t : undefined;
+    if (!seenPeers.has(p.peer)) { seenPeers.add(p.peer); toast(p.nick + ' が入場', 'join'); }
+    else {
+      if (p.emo && emoSeen.get(p.peer) !== t) shout(STAMPS[p.emo.k], p.hue);
+      if (p.win && winSeen.get(p.peer) !== w) {
+        toast(p.nick + (p.win.tier >= 3 ? ' が大穴的中 +' : ' が的中 +') + fmt(p.win.pay), 'win');
+        if (!calm()) firework(0.2 + Math.random() * 0.6, 0.2 + Math.random() * 0.15, p.hue, 40 + p.win.tier * 20);
+      }
+    }
+    emoSeen.set(p.peer, t); winSeen.set(p.peer, w);
   }
   if (dirty || now - lastSent > 1800) pushPresence();
   ui(ps, now);
+}
+
+/* ================= 経験値・称号・実績 ================= */
+function addXp(n){
+  const before = lvOf(S.xp);
+  S.xp += n;
+  const after = lvOf(S.xp);
+  if (after > before) {
+    const bonus = after * 200;
+    S.coins = Math.min(1e12, S.coins + bonus);
+    toast('レベルアップ! Lv.' + after + ' ' + titleOf(after) + ' +' + fmt(bonus) + 'コイン', 'level');
+    setTimeout(() => { sLevel(); if (!calm()) { firework(0.5, 0.25, 50, 90); starBurst(0.5, 0.12, 20, 50); } }, 900);
+  }
+  save();
+}
+function unlock(id){
+  if (S.ach[id]) return;
+  S.ach[id] = true; save();
+  setTimeout(() => toast('実績解除:' + ACH[id], 'ach'), 1400);
 }
 
 /* ================= 操作 ================= */
@@ -288,9 +349,19 @@ function pick(no){
   if (V.ph !== 'bet' || V.late || !isInt(no, 1, 6)) return;
   const bet = stakeNow();
   if (bet <= 0) return;
+  const first = !me.pick;
   me.pick = {n:V.n, s:V.seed, h:no, bet};
   me.sit = false; me.missed = 0;
-  sPick();
+  if (first) V.quick = performance.now() - V.betStart <= QUICK_MS;
+  const el = umaEls[no - 1];
+  if (el) {
+    el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
+    const r = el.getBoundingClientRect();
+    if (!calm()) starBurst((r.left + r.width / 2) / window.innerWidth, (r.top + r.height * 0.3) / window.innerHeight, 12, S.bet === 'all' ? 0 : 50);
+  }
+  if (first && V.quick) callout('秒で決断 ×1.1', 'up');
+  sPick(S.bet === 'all');
+  buzz(12);
   pushPresence();
   tick();
 }
@@ -298,7 +369,7 @@ function setBet(b){
   audioUnlock();
   S.bet = b; save();
   if (me.pick && V.ph === 'bet') { me.pick = {n:me.pick.n, s:me.pick.s, h:me.pick.h, bet:Math.max(1, stakeNow())}; pushPresence(); }
-  sClick();
+  if (b === 'all') { sAllIn(); buzz([20, 20, 20]); } else sClick();
   tick();
 }
 function stamp(k){
@@ -310,10 +381,11 @@ function stamp(k){
   pushPresence();
   setTimeout(() => { if (me.emo === e) { me.emo = null; pushPresence(); } }, 3000);
 }
+function buzz(p){ if (calm()) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
 
 /* ================= 音(BGMも効果音もその場で合成) ================= */
-const A = {ctx:null, master:null, music:null, mfilt:null, sfx:null, crowd:null, noise:null, step:0, nextT:0, mode:0, gallopAt:0, heartAt:0};
-const BPM = 168, STEP = 60 / BPM / 4;
+const A = {ctx:null, master:null, music:null, mfilt:null, sfx:null, crowd:null, noise:null, step:0, nextT:0, mode:0, gallopAt:0, heartAt:0, beats:[], fever:false};
+const BPM = 168;
 const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];           // Am F C G
 const MEL = [
   [76,0,76,79, 0,81,0,79, 76,0,74,0, 76,0,0,0],
@@ -323,6 +395,7 @@ const MEL = [
 ];
 const LOBBY = [[69,0,0,72, 0,0,76,0], [69,0,0,72, 0,0,77,0], [67,0,0,72, 0,0,76,0], [67,0,0,71, 0,0,74,0]];
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const stepLen = () => 60 / (BPM * (A.fever ? 1.07 : 1)) / 4;       // フィーバー中は少し速く
 function audioUnlock(){
   if (!A.ctx) {
     try {
@@ -359,10 +432,11 @@ function tone(dest, type, f, t, dur, vol, slide){
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.03);
 }
-function hiss(dest, t, dur, vol, type, freq, q){
+function hiss(dest, t, dur, vol, type, freq, q, sweep){
   const ctx = A.ctx, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
   s.buffer = A.noise; s.loop = true;
-  f.type = type; f.frequency.value = freq; f.Q.value = q || 0.7;
+  f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q || 0.7;
+  if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(dest); s.start(t, Math.random() * 0.8); s.stop(t + dur + 0.03);
 }
@@ -371,19 +445,21 @@ function sequencer(){
   if (!ctx || ctx.state !== 'running') return;
   if (A.nextT < ctx.currentTime) A.nextT = ctx.currentTime + 0.05;
   while (A.nextT < ctx.currentTime + 0.16) {
+    if (A.step % 4 === 0 && A.beats.length < 16) A.beats.push(A.nextT);
     if (S.bgm && !document.hidden) musicStep(A.step, A.nextT);
-    A.step++; A.nextT += STEP;
+    A.step++; A.nextT += stepLen();
   }
 }
 function musicStep(i, t){
-  const bar = Math.floor(i / 16) % 4, s = i % 16, ch = CH[bar], hi = A.mode === 1, m = A.music;
+  const bar = Math.floor(i / 16) % 4, s = i % 16, ch = CH[bar], hi = A.mode === 1, m = A.music, tr = A.fever ? 2 : 0, ST = stepLen();
   if (hi ? s % 4 === 0 : (s === 0 || s === 10)) tone(m, 'sine', 150, t, 0.16, hi ? 0.95 : 0.6, 42);            // キック
   if (hi && (s === 4 || s === 12)) { hiss(m, t, 0.13, 0.42, 'bandpass', 1900, 0.8); tone(m, 'triangle', 190, t, 0.08, 0.25, 120); }   // スネア
   if (hi || s % 2 === 0) hiss(m, t, s % 4 === 2 ? 0.07 : 0.03, (s % 4 === 2 ? 0.2 : 0.11) * (hi ? 1 : 0.7), 'highpass', 7500, 0.7);       // ハット
-  if (s % 2 === 0) tone(m, hi ? 'sawtooth' : 'triangle', mtof(ch[0] - 24 + (s % 4 === 2 ? 12 : 0)), t, STEP * 1.8, hi ? 0.2 : 0.3);       // ベース
-  tone(m, hi ? 'square' : 'triangle', mtof(ch[[0, 1, 2, 1][s % 4]] + 12 + (hi && s % 8 >= 4 ? 12 : 0)), t, STEP * 0.9, hi ? 0.05 : 0.07); // アルペジオ
-  if (hi) { const n = MEL[bar][s]; if (n) tone(m, 'sawtooth', mtof(n), t, STEP * 1.9, 0.085); }
-  else if (s % 2 === 0) { const n = LOBBY[bar][s / 2]; if (n) tone(m, 'sine', mtof(n), t, STEP * 3.5, 0.1); }
+  if (s % 2 === 0) tone(m, hi ? 'sawtooth' : 'triangle', mtof(ch[0] + tr - 24 + (s % 4 === 2 ? 12 : 0)), t, ST * 1.8, hi ? 0.2 : 0.3);       // ベース
+  tone(m, hi ? 'square' : 'triangle', mtof(ch[[0, 1, 2, 1][s % 4]] + tr + 12 + (hi && s % 8 >= 4 ? 12 : 0)), t, ST * 0.9, hi ? 0.05 : 0.07); // アルペジオ
+  if (A.fever) tone(m, 'sine', mtof(ch[[2, 0, 1, 2][s % 4]] + tr + 36), t, ST * 0.6, 0.03);                      // フィーバー中のきらきら
+  if (hi) { const n = MEL[bar][s]; if (n) tone(m, 'sawtooth', mtof(n + tr), t, ST * 1.9, 0.085); }
+  else if (s % 2 === 0) { const n = LOBBY[bar][s / 2]; if (n) tone(m, 'sine', mtof(n + tr), t, ST * 3.5, 0.1); }
 }
 function audioMode(mode){
   A.mode = mode;
@@ -397,20 +473,30 @@ function audioMode(mode){
 }
 const sfxOK = () => A.ctx && A.ctx.state === 'running' && S.sfx;
 function sClick(){ if (sfxOK()) tone(A.sfx, 'square', 700, A.ctx.currentTime, 0.04, 0.08); }
-function sPick(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', 880, t, 0.06, 0.1); tone(A.sfx, 'square', 1320, t + 0.06, 0.09, 0.1); } }
+function sPick(all){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', 880, t, 0.06, 0.1); tone(A.sfx, 'square', 1320, t + 0.06, 0.09, 0.1); if (all) tone(A.sfx, 'sawtooth', 110, t, 0.35, 0.2, 55); } }
+function sAllIn(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 90, t, 0.4, 0.22, 180); hiss(A.sfx, t, 0.4, 0.2, 'bandpass', 300, 1, 2400); } }
 function sGate(){ if (sfxOK()) { const t = A.ctx.currentTime; hiss(A.sfx, t, 0.22, 0.7, 'bandpass', 2400, 1.2); tone(A.sfx, 'sine', 120, t, 0.3, 0.8, 38); } }
+function sWhoosh(){ if (sfxOK()) hiss(A.sfx, A.ctx.currentTime, 0.28, 0.22, 'bandpass', 500, 1.4, 5200); }
 function sCoin(){ if (sfxOK()) tone(A.sfx, 'sine', 1700 + Math.random() * 900, A.ctx.currentTime, 0.07, 0.07); }
+function sTick(k){ if (sfxOK()) tone(A.sfx, 'square', 900 + k * 900, A.ctx.currentTime, 0.03, 0.045); }
 function sRank(up){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'triangle', up ? 660 : 440, t, 0.07, 0.16, up ? 990 : 330); } }
-function sGoal(){ if (sfxOK()) { const t = A.ctx.currentTime; hiss(A.sfx, t, 0.9, 0.5, 'highpass', 3000, 0.5); tone(A.sfx, 'sine', 90, t, 0.5, 0.9, 30); } }
-function sWin(big){
+function cheer(v){ if (A.ctx && A.ctx.state === 'running') { const t = A.ctx.currentTime; A.crowd.gain.cancelScheduledValues(t); A.crowd.gain.setValueAtTime(v, t); A.crowd.gain.setTargetAtTime(0.04, t + 0.25, 0.4); } }
+function sLead(){ if (sfxOK()) { const t = A.ctx.currentTime; [79, 84, 91].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + i * 0.05, 0.12, 0.1)); cheer(0.22); } }
+function sRoll(){ if (sfxOK()) { const t = A.ctx.currentTime; for (let i = 0; i < 18; i++) hiss(A.sfx, t + i * 0.082, 0.06, 0.08 + i * 0.022, 'bandpass', 1700, 0.9); } }
+function sToast(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'triangle', 1175, t, 0.08, 0.1); tone(A.sfx, 'triangle', 1568, t + 0.08, 0.14, 0.1); } }
+function sLevel(){ if (sfxOK()) { const t = A.ctx.currentTime; [60, 64, 67, 72, 76, 79, 84, 88].forEach((n, i) => { tone(A.sfx, 'square', mtof(n), t + i * 0.055, 0.14, 0.09); tone(A.sfx, 'triangle', mtof(n + 12), t + i * 0.055, 0.14, 0.07); }); } }
+function sHorn(){ if (sfxOK()) { const t = A.ctx.currentTime; [0, 0.22, 0.44].forEach((d, k) => [69, 73, 76].forEach(n => { tone(A.sfx, 'sawtooth', mtof(n), t + d, k === 2 ? 0.7 : 0.16, 0.07); tone(A.sfx, 'sawtooth', mtof(n) * 1.008, t + d, k === 2 ? 0.7 : 0.16, 0.06); })); } }
+function sGoal(){ if (sfxOK()) { const t = A.ctx.currentTime; hiss(A.sfx, t, 0.9, 0.5, 'highpass', 3000, 0.5); tone(A.sfx, 'sine', 90, t, 0.5, 0.9, 30); hiss(A.sfx, t, 0.03, 0.5, 'highpass', 6000, 1); hiss(A.sfx, t + 0.07, 0.03, 0.4, 'highpass', 6000, 1); } }
+function sWin(tier){
   if (!sfxOK()) return;
   const t = A.ctx.currentTime;
   [72, 76, 79, 84, 88].forEach((n, i) => { tone(A.sfx, 'square', mtof(n), t + i * 0.07, 0.16, 0.11); tone(A.sfx, 'triangle', mtof(n - 12), t + i * 0.07, 0.2, 0.14); });
-  if (big) [84, 88, 91, 96, 100, 103].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.4 + i * 0.06, 0.2, 0.09));
-  [72, 76, 79].forEach(n => tone(A.sfx, 'sawtooth', mtof(n), t + (big ? 0.8 : 0.4), 0.7, 0.06));
+  if (tier >= 2) [84, 88, 91, 96, 100, 103].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.4 + i * 0.06, 0.2, 0.09));
+  if (tier >= 4) [96, 100, 103, 108, 103, 108, 112].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.85 + i * 0.07, 0.22, 0.08));
+  [72, 76, 79].forEach(n => tone(A.sfx, 'sawtooth', mtof(n), t + (tier >= 2 ? 0.8 : 0.4), 0.7, 0.06));
   A.crowd.gain.cancelScheduledValues(t);
-  A.crowd.gain.setValueAtTime(big ? 0.4 : 0.26, t);
-  A.crowd.gain.setTargetAtTime(0.012, t + 0.6, 0.7);
+  A.crowd.gain.setValueAtTime(0.2 + tier * 0.07, t);
+  A.crowd.gain.setTargetAtTime(0.012, t + 0.5 + tier * 0.3, 0.7);
 }
 function sLose(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 220, t, 0.3, 0.12, 110); A.crowd.gain.setTargetAtTime(0.012, t, 0.3); } }
 function sBust(){ if (sfxOK()) { const t = A.ctx.currentTime; [0, 0.16, 0.32].forEach((d, i) => tone(A.sfx, 'sawtooth', 196 / (1 + i * 0.25), t + d, 0.28, 0.14)); } }
@@ -427,6 +513,14 @@ function audioFrame(racing, slow, u){
   }
   if (racing && !V.settled) A.crowd.gain.setTargetAtTime(0.04 + 0.16 * u * u, t, 0.15);
 }
+// 拍に合わせて光らせるための値(0〜1)。音が止まっていても時計で刻む
+let beat = 0, beatClock = 0;
+function beatFrame(now, dt){
+  beat *= Math.exp(-dt * 7);
+  if (A.ctx && A.ctx.state === 'running') {
+    while (A.beats.length && A.beats[0] <= A.ctx.currentTime) { A.beats.shift(); beat = 1; }
+  } else if (now - beatClock > 60000 / BPM) { beatClock = now; beat = 1; }
+}
 
 /* ================= 3D ================= */
 let G = null;
@@ -435,6 +529,35 @@ function canvasTex(w, h, paint){
   paint(c.getContext('2d'), w, h);
   return new THREE.CanvasTexture(c);
 }
+function skyTex(stops){
+  return canvasTex(4, 256, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    stops.forEach(([p, col]) => g.addColorStop(p, col));
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+  });
+}
+// 粒子の入れ物(蹴り上げる芝、火花)
+function makePool(T, scene, n, mat){
+  const pos = new Float32Array(n * 3).fill(-999), geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+  const pts = new T.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
+  return {pos, vel:new Float32Array(n * 3), life:new Float32Array(n), geo, n, i:0, grav:6};
+}
+function spawn(P, x, y, z, vx, vy, vz, life){
+  const i = P.i; P.i = (P.i + 1) % P.n;
+  P.pos[i * 3] = x; P.pos[i * 3 + 1] = y; P.pos[i * 3 + 2] = z;
+  P.vel[i * 3] = vx; P.vel[i * 3 + 1] = vy; P.vel[i * 3 + 2] = vz; P.life[i] = life;
+}
+function stepPool(P, dt){
+  for (let i = 0; i < P.n; i++) {
+    if (P.life[i] <= 0) continue;
+    P.life[i] -= dt;
+    if (P.life[i] <= 0) { P.pos[i * 3 + 1] = -999; continue; }
+    P.pos[i * 3] += P.vel[i * 3] * dt; P.pos[i * 3 + 1] += P.vel[i * 3 + 1] * dt; P.pos[i * 3 + 2] += P.vel[i * 3 + 2] * dt;
+    P.vel[i * 3 + 1] -= P.grav * dt;
+  }
+  P.geo.attributes.position.needsUpdate = true;
+}
 function init3D(){
   const T = window.THREE;
   if (!T) return null;
@@ -442,14 +565,17 @@ function init3D(){
   const renderer = new T.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   const scene = new T.Scene();
-  scene.fog = new T.Fog(0x1a1438, 60, 430);
-  scene.background = canvasTex(4, 256, (c, w, h) => {
-    const g = c.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, '#040618'); g.addColorStop(0.38, '#0d1238'); g.addColorStop(0.5, '#3a1d5c'); g.addColorStop(0.56, '#c2415a'); g.addColorStop(0.6, '#1a1438'); g.addColorStop(1, '#0a0e24');
-    c.fillStyle = g; c.fillRect(0, 0, w, h);
-  });
+  // 空は4種類:ナイター、夕焼け、オーロラ、ゴールデンレース
+  const skies = [
+    {tex:skyTex([[0, '#040618'], [0.38, '#0d1238'], [0.5, '#3a1d5c'], [0.56, '#c2415a'], [0.6, '#1a1438'], [1, '#0a0e24']]), fog:0x1a1438, hemi:0xaab4ff},
+    {tex:skyTex([[0, '#1b1040'], [0.3, '#7a2a6a'], [0.48, '#ff6a3c'], [0.56, '#ffc24a'], [0.6, '#3a1a38'], [1, '#1a0e24']]), fog:0x4a2040, hemi:0xffc8a0},
+    {tex:skyTex([[0, '#02121c'], [0.25, '#0b4a52'], [0.42, '#1fd6a0'], [0.5, '#5a3ad6'], [0.58, '#0d2a3a'], [1, '#06101c']]), fog:0x0f2f3a, hemi:0x9affd8},
+    {tex:skyTex([[0, '#2a1a02'], [0.3, '#8a5a08'], [0.48, '#ffd60a'], [0.56, '#fff3a0'], [0.6, '#4a3008'], [1, '#1a1204']]), fog:0x5a4410, hemi:0xfff0b0}
+  ];
+  scene.fog = new T.Fog(skies[0].fog, 60, 430);
+  scene.background = skies[0].tex;
   const camera = new T.PerspectiveCamera(50, 1, 0.1, 900);
-  scene.add(new T.HemisphereLight(0xaab4ff, 0x1c4a2a, 0.85));
+  const hemi = new T.HemisphereLight(0xaab4ff, 0x1c4a2a, 0.85); scene.add(hemi);
   const sun = new T.DirectionalLight(0xffffff, 0.95); sun.position.set(-0.5, 1, 0.7); scene.add(sun);
 
   const X0 = -70, X1 = TL + 220, XL = X1 - X0, XC = (X0 + X1) / 2;
@@ -476,9 +602,12 @@ function init3D(){
     if (Math.abs(x - TL) < 6) continue;
     add(new T.BoxGeometry(0.22, 1.6, 0.22), white, x, 0.8, z); add(new T.BoxGeometry(0.24, 0.8, 0.24), red, x, 2.0, z); add(new T.BoxGeometry(0.22, 0.8, 0.22), white, x, 2.8, z);
   }
-  // 看板(奥側)
-  const adCols = [0xff2d3d, 0xffd60a, 0x1f5fd1, 0xf6f4ec, 0x12a150, 0xff7a1a, 0xb14cff];
-  for (let x = X0 + 8, i = 0; x < X1; x += 14, i++) add(new T.BoxGeometry(12.4, 1.5, 0.2), new T.MeshLambertMaterial({color:adCols[i % adCols.length], emissive:adCols[i % adCols.length], emissiveIntensity:0.35}), x, 0.95, -11.2);
+  // ネオン看板(拍に合わせて波打つ)
+  const adCols = [0xff2d3d, 0xffd60a, 0x1f5fd1, 0xf6f4ec, 0x12a150, 0xff7a1a, 0xb14cff], ads = [];
+  for (let x = X0 + 8, i = 0; x < X1; x += 14, i++) {
+    const m = new T.MeshLambertMaterial({color:adCols[i % adCols.length], emissive:adCols[i % adCols.length], emissiveIntensity:0.35});
+    add(new T.BoxGeometry(12.4, 1.5, 0.2), m, x, 0.95, -11.2); ads.push(m);
+  }
   // スタンド
   const crowd = canvasTex(512, 128, (c, w, h) => {
     c.fillStyle = '#121633'; c.fillRect(0, 0, w, h);
@@ -503,6 +632,25 @@ function init3D(){
     add(new T.BoxGeometry(0.7, 30, 0.7), pole, x, 15, z);
     const s = new T.Sprite(glowMat); s.position.set(x, 31, z); s.scale.set(26, 26, 1); scene.add(s);
   }
+  // レーザー(スタンドの屋根から空へ)
+  const lasers = [], lcol = [0xff2d3d, 0x2de2ff, 0xffd60a, 0x7dff5a, 0xff5af0, 0xffffff, 0x2de2ff, 0xff2d3d];
+  for (let i = 0; i < 8; i++) {
+    const geo = new T.CylinderGeometry(0.06, 1.1, 240, 6, 1, true); geo.translate(0, 120, 0);
+    const m = new T.Mesh(geo, new T.MeshBasicMaterial({color:lcol[i], transparent:true, opacity:0.2, blending:T.AdditiveBlending, depthWrite:false, side:T.DoubleSide, fog:false}));
+    m.position.set(-10 + i * 42, 16, -24); m.visible = false; scene.add(m); lasers.push(m);
+  }
+  // 客席のフラッシュ
+  const FN = 180, fpos = new Float32Array(FN * 3).fill(-999), fgeo = new T.BufferGeometry();
+  fgeo.setAttribute('position', new T.BufferAttribute(fpos, 3));
+  const flashes = new T.Points(fgeo, new T.PointsMaterial({color:0xffffff, size:2.2, map:glow, transparent:true, blending:T.AdditiveBlending, depthWrite:false, fog:false}));
+  flashes.frustumCulled = false; scene.add(flashes);
+  // ターフビジョン(発馬機の奥、向正面、ゴール前の3か所)
+  const vc = document.createElement('canvas'); vc.width = 512; vc.height = 192;
+  const vtex = new T.CanvasTexture(vc), vmat = new T.MeshBasicMaterial({map:vtex, fog:false}), vframe = lam(0x14183a);
+  for (const x of [-14, 110, 215]) {
+    add(new T.BoxGeometry(33, 13, 1), vframe, x, 10.2, -19.2);
+    add(new T.PlaneGeometry(31, 11.6), vmat, x, 10.2, -18.65);
+  }
   // 発馬機
   const gate = lam(0x24306b);
   for (let i = 0; i <= 6; i++) add(new T.BoxGeometry(0.16, 2.8, 0.16), gate, -1.9, 1.4, (i - 3) * 2.4);
@@ -510,25 +658,31 @@ function init3D(){
   // ゴール
   const gl = add(new T.PlaneGeometry(0.6, 17.4), new T.MeshBasicMaterial({color:0xffffff}), TL, 0.03, 0); gl.rotation.x = -Math.PI / 2;
   for (const z of [-9.4, 9.4]) add(new T.BoxGeometry(0.6, 7.4, 0.6), white, TL, 3.7, z);
-  add(new T.BoxGeometry(1, 1.6, 19.4), new T.MeshLambertMaterial({color:0xff2d3d, emissive:0xff2d3d, emissiveIntensity:0.6}), TL, 7.6, 0);
+  const goalMat = new T.MeshLambertMaterial({color:0xff2d3d, emissive:0xff2d3d, emissiveIntensity:0.6});
+  add(new T.BoxGeometry(1, 1.6, 19.4), goalMat, TL, 7.6, 0);
   const goalTex = canvasTex(512, 64, (c, w, h) => { c.fillStyle = '#ff2d3d'; c.fillRect(0, 0, w, h); c.fillStyle = '#fff'; c.font = '900 52px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('G O A L', w / 2, h / 2 + 3); });
   const gb = add(new T.PlaneGeometry(18, 1.5), new T.MeshBasicMaterial({map:goalTex}), TL - 0.52, 7.6, 0); gb.rotation.y = -Math.PI / 2;
+  // ゴールの電飾
+  const bulbs = [];
+  for (let i = 0; i < 16; i++) {
+    const s = new T.Sprite(new T.SpriteMaterial({map:glow, color:i % 2 ? 0xffd60a : 0xffffff, blending:T.AdditiveBlending, depthWrite:false, transparent:true, fog:false}));
+    s.position.set(TL, 8.7, -9 + i * 1.2); s.scale.set(1.6, 1.6, 1); scene.add(s); bulbs.push(s);
+  }
 
-  // 馬
+  // 馬と、その後ろに伸びる光の尾
+  const trailTex = canvasTex(128, 16, (c, w, h) => { const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,1)'); c.fillStyle = g; c.fillRect(0, 0, w, h); });
   const horses = [];
-  for (let no = 1; no <= 6; no++) horses.push(makeHorse(T, scene, no));
-  // 砂ぼこり
-  const DN = 360, dpos = new Float32Array(DN * 3).fill(-999), dgeo = new T.BufferGeometry();
-  dgeo.setAttribute('position', new T.BufferAttribute(dpos, 3));
-  const dust = new T.Points(dgeo, new T.PointsMaterial({color:0x0f5a2c, size:0.2, transparent:true, opacity:0.9, depthWrite:false}));
-  dust.frustumCulled = false; scene.add(dust);
-  const dvel = new Float32Array(DN * 3), dlife = new Float32Array(DN);
+  for (let no = 1; no <= 6; no++) horses.push(makeHorse(T, scene, no, trailTex));
+  // 蹴り上げる芝と、自分の馬の火花
+  const dust = makePool(T, scene, 360, new T.PointsMaterial({color:0x0f5a2c, size:0.2, transparent:true, opacity:0.9, depthWrite:false}));
+  const sparks = makePool(T, scene, 260, new T.PointsMaterial({color:0xffd60a, size:0.9, map:glow, transparent:true, blending:T.AdditiveBlending, depthWrite:false, fog:false}));
+  sparks.grav = 2;
 
-  const g3 = {T, renderer, scene, camera, horses, dust:{pos:dpos, vel:dvel, life:dlife, geo:dgeo, n:DN, i:0},
-    shot:'', cam:new T.Vector3(8, 2.4, 10), look:new T.Vector3(0, 1.4, 0), kick:0, sheetVis:1, W:1, H:1};
-  return g3;
+  return {T, renderer, scene, camera, hemi, skies, sky:-1, horses, dust, sparks, ads, lasers, bulbs, goalMat,
+    flashes:{pos:fpos, geo:fgeo, n:FN}, vision:{c:vc, ctx:vc.getContext('2d'), tex:vtex, sig:''},
+    shot:'', cam:new T.Vector3(8, 2.4, 10), look:new T.Vector3(0, 1.4, 0), kick:0, sheetVis:1, W:1, H:1, v:new T.Vector3()};
 }
-function makeHorse(T, scene, no){
+function makeHorse(T, scene, no, trailTex){
   const g = new T.Group();
   const mBody = new T.MeshLambertMaterial({color:0x8a5230}), mDark = new T.MeshLambertMaterial({color:0x3d2210});
   const F = FRAME[no - 1];
@@ -566,15 +720,19 @@ function makeHorse(T, scene, no){
   // 影
   const sh = new T.Mesh(new T.CircleGeometry(1, 14), new T.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.32, depthWrite:false}));
   sh.rotation.x = -Math.PI / 2; sh.position.y = 0.03; sh.scale.set(1.7, 0.6, 1); g.add(sh);
+  // 光の尾(縦と横の2枚)
+  const tMat = new T.MeshBasicMaterial({map:trailTex, color:F.glow, transparent:true, opacity:0.5, blending:T.AdditiveBlending, depthWrite:false, side:T.DoubleSide, fog:false});
+  const trail = new T.Group(); trail.position.set(-1.2, 1.5, 0); trail.visible = false;
+  const t1 = new T.Mesh(new T.PlaneGeometry(1, 1.1), tMat); t1.position.x = -0.5;
+  const t2 = new T.Mesh(new T.PlaneGeometry(1, 0.7), tMat); t2.position.x = -0.5; t2.rotation.x = Math.PI / 2;
+  trail.add(t1, t2); g.add(trail);
   // 自分の馬の目印
   const marker = new T.Mesh(new T.ConeGeometry(0.6, 1.1, 4), new T.MeshBasicMaterial({color:0xffd60a, fog:false}));
   marker.rotation.x = Math.PI; marker.position.y = 4.1; marker.visible = false; g.add(marker);
-  const beam = new T.Mesh(new T.CylinderGeometry(0.12, 0.5, 5, 8, 1, true), new T.MeshBasicMaterial({color:0xffe45c, transparent:true, opacity:0.32, blending:T.AdditiveBlending, depthWrite:false, side:T.DoubleSide, fog:false}));
-  beam.position.y = 6.9; beam.visible = false; g.add(beam);
   const z = (no - 3.5) * 2.4;
   g.position.set(0, 0, z);
   scene.add(g);
-  return {no, g, z, x:0, p:0, torso, neck, tail, legs, jk, marker, beam, mBody, mDark};
+  return {no, g, z, x:0, p:0, torso, neck, tail, legs, jk, marker, trail, tMat, glow:F.glow, mBody, mDark};
 }
 function pose(H, ph, run, now){
   for (const L of H.legs) {
@@ -598,9 +756,48 @@ function resize3D(){
   G.renderer.setSize(w, h, false);
   G.camera.aspect = w / h;
 }
+function setSky(i){
+  if (G.sky === i) return;
+  G.sky = i;
+  const s = G.skies[i];
+  G.scene.background = s.tex; G.scene.fog.color.setHex(s.fog); G.hemi.color.setHex(s.hemi);
+}
+// ターフビジョン:投票中はオッズ、レース中は上位3頭
+function drawVision(racing, tau){
+  const R = V.race, vi = G.vision, c = vi.ctx, W = vi.c.width, Hh = vi.c.height;
+  let order = [], head = '投票受付中';
+  if (racing) {
+    const key = h => tau >= h.T ? 10 - h.T : prog(h, tau);
+    order = R.hs.slice().sort((a, b) => key(b) - key(a)).slice(0, 3).map(h => h.no);
+    head = V.settled ? '確定' : 'レース中';
+  }
+  const sig = V.n + head + order.join('') + (R.gold ? 'g' : '');
+  if (sig === vi.sig) return;
+  vi.sig = sig;
+  c.fillStyle = R.gold ? '#3a2a00' : '#060a20'; c.fillRect(0, 0, W, Hh);
+  c.fillStyle = R.gold ? '#ffd60a' : '#ff2d3d'; c.fillRect(0, 0, W, 46);
+  c.fillStyle = R.gold ? '#16130f' : '#fff'; c.font = '900 34px sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'left';
+  c.fillText('第' + V.n + 'R ' + head, 14, 25);
+  if (R.gold) { c.textAlign = 'right'; c.fillText('払戻×2', W - 14, 25); }
+  c.textAlign = 'center';
+  if (order.length) order.forEach((no, i) => {
+    const x = 96 + i * 160, F = FRAME[no - 1];
+    c.fillStyle = '#f6f4ec'; c.font = '900 26px sans-serif'; c.fillText((i + 1) + '着', x - 52, 120);
+    c.fillStyle = F.bg; c.fillRect(x - 20, 66, 104, 104); c.strokeStyle = '#f6f4ec'; c.lineWidth = 4; c.strokeRect(x - 20, 66, 104, 104);
+    c.fillStyle = F.fg; c.font = '900 84px sans-serif'; c.fillText(String(no), x + 32, 124);
+  });
+  else R.hs.forEach((h, i) => {
+    const x = 44 + i * 85, F = FRAME[i];
+    c.fillStyle = F.bg; c.fillRect(x - 30, 62, 60, 56); c.fillStyle = F.fg; c.font = '900 40px sans-serif'; c.fillText(String(h.no), x, 92);
+    c.fillStyle = h.odds >= 15 ? '#ffd60a' : '#f6f4ec'; c.font = '900 26px sans-serif'; c.fillText(h.odds.toFixed(1), x, 150);
+  });
+  vi.tex.needsUpdate = true;
+}
 function update3D(now, dt, racing, t, tau){
   if (!G || !V.race) return;
   const R = V.race, cam = G.camera, myH = myHorseNo();
+  const live = racing && !V.settled, hot = S.streak >= 2 || R.gold, quiet = calm();
+  setSky(R.gold ? 3 : R.seed % 3);
   let lead = -1e9, mine = 0;
   const xs = [];
   for (const H of G.horses) {
@@ -614,24 +811,44 @@ function update3D(now, dt, racing, t, tau){
     const isMine = H.no === myH;
     H.marker.visible = isMine;
     if (isMine) { H.marker.position.y = 4.1 + Math.sin(now / 150) * 0.2; H.marker.rotation.y = now / 260; mine = H.x; }
+    // 光の尾:自分の馬は金色で長く
+    const tv = racing && run > 0.55 && !quiet;
+    H.trail.visible = tv;
+    if (tv) {
+      H.trail.scale.x = (isMine ? 9 : 5) * run * (0.85 + beat * 0.3);
+      H.trail.scale.y = isMine ? 1.5 : 1;
+      H.tMat.color.setHex(isMine ? 0xffd60a : H.glow);
+      H.tMat.opacity = isMine ? 0.8 : 0.4;
+    }
     xs.push(H.x); if (H.x > lead) lead = H.x;
-    // 砂ぼこり
-    if (racing && run > 0.5 && !reduced && Math.random() < 0.7) {
-      const d = G.dust, i = d.i; d.i = (d.i + 1) % d.n;
-      d.pos[i * 3] = H.x - 0.9; d.pos[i * 3 + 1] = 0.12; d.pos[i * 3 + 2] = H.z + (Math.random() - 0.5) * 0.5;
-      d.vel[i * 3] = -3 - Math.random() * 5; d.vel[i * 3 + 1] = 1.5 + Math.random() * 2.5; d.vel[i * 3 + 2] = (Math.random() - 0.5) * 2;
-      d.life[i] = 0.55;
+    if (racing && run > 0.5 && !quiet) {
+      if (Math.random() < 0.7) spawn(G.dust, H.x - 0.9, 0.12, H.z + (Math.random() - 0.5) * 0.5, -3 - Math.random() * 5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 2, 0.55);
+      if (isMine && (hot || (V.locked && V.locked.all) || (h.rank === 1 && tau >= h.T))) spawn(G.sparks, H.x - 0.6 + Math.random() * 1.6, 0.8 + Math.random() * 1.6, H.z + (Math.random() - 0.5) * 0.9, -4 - Math.random() * 6, 1 + Math.random() * 3, (Math.random() - 0.5) * 3, 0.5);
     }
   }
-  const d = G.dust, rate = racing && V.slow ? SL_RATE : 1;
-  for (let i = 0; i < d.n; i++) {
-    if (d.life[i] <= 0) continue;
-    d.life[i] -= dt * rate;
-    if (d.life[i] <= 0) { d.pos[i * 3 + 1] = -999; continue; }
-    d.pos[i * 3] += d.vel[i * 3] * dt * rate; d.pos[i * 3 + 1] += d.vel[i * 3 + 1] * dt * rate; d.pos[i * 3 + 2] += d.vel[i * 3 + 2] * dt * rate;
-    d.vel[i * 3 + 1] -= 6 * dt * rate;
+  const rate = racing && V.slow ? SL_RATE : 1;
+  stepPool(G.dust, dt * rate); stepPool(G.sparks, dt * rate);
+
+  // ギラギラ:看板、ゴールの電飾、レーザー、客席のフラッシュ
+  const s = now / 1000;
+  for (let i = 0; i < G.ads.length; i++) G.ads[i].emissiveIntensity = quiet ? 0.35 : 0.25 + 0.75 * Math.max(0, Math.sin(s * 5 - i * 0.7)) * (0.4 + beat * 0.6);
+  G.goalMat.emissiveIntensity = quiet ? 0.6 : 0.45 + beat * 0.55;
+  for (let i = 0; i < G.bulbs.length; i++) G.bulbs[i].material.opacity = quiet ? 0.6 : (Math.floor(s * 8) + i) % 3 === 0 ? 1 : 0.25;
+  const showLaser = !quiet && (racing || hot);
+  for (let i = 0; i < G.lasers.length; i++) {
+    const L = G.lasers[i]; L.visible = showLaser;
+    if (!showLaser) continue;
+    L.rotation.z = Math.sin(s * (0.7 + i * 0.07) + i * 1.7) * 0.85;
+    L.rotation.x = 0.55 + Math.sin(s * 0.5 + i) * 0.4;
+    L.material.opacity = 0.1 + beat * 0.16 + (V.settled && racing ? 0.1 : 0);
   }
-  d.geo.attributes.position.needsUpdate = true;
+  const F = G.flashes, fN = quiet ? 0 : Math.floor(racing ? 50 + 130 * clamp(tau / R.tWin, 0, 1) : hot ? 40 : 14);
+  for (let k = 0; k < 18; k++) {
+    const i = Math.floor(Math.random() * F.n), y = 2.5 + Math.random() * 10.5;
+    F.pos[i * 3] = G.cam.x + (Math.random() - 0.5) * 260; F.pos[i * 3 + 1] = y; F.pos[i * 3 + 2] = -21.6 - (y - 7.6) * 0.29;
+  }
+  F.geo.attributes.position.needsUpdate = true; F.geo.setDrawRange(0, fN);
+  drawVision(racing, tau);
 
   // カメラ
   xs.sort((a, b) => b - a);
@@ -640,12 +857,12 @@ function update3D(now, dt, racing, t, tau){
   let id, px, py, pz, lx, ly, lz, fov, ease = 0;
   const far = cam.aspect < 1 ? 1.45 : 1;       // 縦長の画面では横からのカメラを引く
   if (!racing) {
-    const s = now / 1000, mz = myH ? G.horses[myH - 1].z : 0;
+    const mz = myH ? G.horses[myH - 1].z : 0;
     id = 'I'; px = 9 + Math.sin(s * 0.25) * 2.2; py = 2.3 + Math.sin(s * 0.4) * 0.25; pz = 10.5 - Math.cos(s * 0.25) * 1.2;
     lx = 0.4; ly = 1.35; lz = mz * 0.35; fov = 44; ease = 3;
   } else if (V.settled && t > R.tSettle + 0.3) {
-    const w = G.horses[R.order[0] - 1], s = t - R.tSettle, ang = -0.95 + s * 0.3;
-    id = 'E'; px = w.x + Math.cos(ang) * 8.5; pz = w.z - Math.sin(ang) * 8.5; py = 2 + s * 0.2; lx = w.x; ly = 1.7; lz = w.z; fov = 38; ease = 6;
+    const w = G.horses[R.order[0] - 1], ss = t - R.tSettle, ang = -0.95 + ss * 0.3;
+    id = 'E'; px = w.x + Math.cos(ang) * 8.5; pz = w.z - Math.sin(ang) * 8.5; py = 2 + ss * 0.2; lx = w.x; ly = 1.7; lz = w.z; fov = 38; ease = 6;
   } else {
     const u = tau / R.tWin;
     if (u < 0.2) { id = 'A'; px = focus - 8.5; py = 2.7; pz = 2.2; lx = focus + 10; ly = 1.3; lz = 0; fov = 62; }
@@ -653,51 +870,89 @@ function update3D(now, dt, racing, t, tau){
     else if (u < 0.78) { id = 'C'; px = lead + 15; py = 1.7; pz = 3.2; lx = focus; ly = 1.6; lz = -0.6; fov = 38; }
     else { const cx = Math.min(lead + 2, TL - 4), k = clamp((t - R.a) / 1.5, 0, 1); id = 'D'; px = cx; py = 3.0 * far; pz = 14.5 * far; lx = cx + 3.4; ly = 1.2; lz = 0; fov = 50 - 14 * k; }
   }
-  if (id !== G.shot || !ease) { G.shot = id; G.cam.set(px, py, pz); G.look.set(lx, ly, lz); }
+  if (id !== G.shot) { if (racing && G.shot && id !== 'A') sWhoosh(); G.shot = id; G.cam.set(px, py, pz); G.look.set(lx, ly, lz); }
+  else if (!ease) { G.cam.set(px, py, pz); G.look.set(lx, ly, lz); }
   else { const f = 1 - Math.exp(-dt * ease); G.cam.x += (px - G.cam.x) * f; G.cam.y += (py - G.cam.y) * f; G.cam.z += (pz - G.cam.z) * f; G.look.x += (lx - G.look.x) * f; G.look.y += (ly - G.look.y) * f; G.look.z += (lz - G.look.z) * f; }
   G.kick *= Math.exp(-dt * 4.5);
-  const amp = reduced ? 0 : (racing && !V.settled ? 0.035 : 0) + G.kick * 0.3;
+  const amp = quiet ? 0 : (live ? 0.035 + beat * 0.03 : 0) + G.kick * 0.3;
   cam.position.set(G.cam.x + (Math.random() - 0.5) * amp, G.cam.y + (Math.random() - 0.5) * amp, G.cam.z + (Math.random() - 0.5) * amp);
   cam.lookAt(G.look);
   const asp = cam.aspect;
-  cam.fov = asp >= 1.3 ? fov : Math.min(100, fov * (1 + (1.3 - asp) * 0.75));
+  cam.fov = (asp >= 1.3 ? fov : Math.min(100, fov * (1 + (1.3 - asp) * 0.75))) - (quiet || !live ? 0 : beat * 0.9);
   // 下の投票パネルに隠れないよう、画面の中心を上へずらす
   const want = (V.ph === 'bet' || V.late) ? 1 : 0;
   G.sheetVis += (want - G.sheetVis) * (1 - Math.exp(-dt * 9));
   const off = Math.round($('sheet').offsetHeight * 0.42 * G.sheetVis);
   if (off > 1) cam.setViewOffset(G.W, G.H, 0, off, G.W, G.H); else { if (cam.view) cam.clearViewOffset(); cam.updateProjectionMatrix(); }
   G.renderer.render(G.scene, cam);
+
+  // 馬の頭上に、賭けた人の名札を重ねる
+  for (const H of G.horses) {
+    const el = tagEls[H.no - 1];
+    if (!el) continue;
+    if (!el.textContent) { el.style.opacity = '0'; continue; }
+    const v = G.v.set(H.x, H.no === myH ? 5.3 : 3.6, H.z).project(cam);
+    if (v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05) {
+      el.style.opacity = '1';
+      el.style.transform = 'translate(' + ((v.x * 0.5 + 0.5) * G.W).toFixed(1) + 'px,' + ((-v.y * 0.5 + 0.5) * G.H).toFixed(1) + 'px) translate(-50%,-100%)';
+    } else el.style.opacity = '0';
+  }
 }
 
-/* ================= 画面エフェクト(集中線・紙吹雪・コイン) ================= */
+/* ================= 画面エフェクト(集中線・花火・星・紙吹雪・コイン) ================= */
 const fx = $('fx'), fctx = fx.getContext('2d');
-let parts = [], coinsFx = [], fxDirty = false, burst = 0;
+let parts = [], coinsFx = [], rain = [], fw = [], stars = [], rings = [], fxDirty = false, burst = 0, hueSpin = 0;
 function resizeFx(){ fx.width = window.innerWidth; fx.height = window.innerHeight; }
 function confetti(n){
-  if (reduced) return;
-  const W = fx.width, H = fx.height, cols = ['#ffd60a', '#ff2d3d', '#f6f4ec', '#1f5fd1', '#12a150'];
-  for (let i = 0; i < n; i++) parts.push({x:W * (0.15 + Math.random() * 0.7), y:H * 0.45, vx:(Math.random() - 0.5) * 22, vy:-6 - Math.random() * 16,
-    w:6 + Math.random() * 8, rot:Math.random() * 6.28, vr:(Math.random() - 0.5) * 0.6, c:cols[i % cols.length], life:90 + Math.random() * 60});
+  if (calm()) return;
+  const W = fx.width, H = fx.height, cols = ['#ffd60a', '#ff2d3d', '#f6f4ec', '#1f5fd1', '#12a150', '#ff5af0', '#2de2ff'];
+  for (let i = 0; i < n; i++) parts.push({x:W * (0.1 + Math.random() * 0.8), y:H * 0.45, vx:(Math.random() - 0.5) * 26, vy:-6 - Math.random() * 18,
+    w:6 + Math.random() * 9, rot:Math.random() * 6.28, vr:(Math.random() - 0.5) * 0.6, c:cols[i % cols.length], life:90 + Math.random() * 70});
+}
+function coinFly(n){
+  if (calm()) return;
+  const r = $('wallet').getBoundingClientRect(), W = fx.width, H = fx.height;
+  for (let i = 0; i < n; i++) coinsFx.push({x0:W / 2 + (Math.random() - 0.5) * W * 0.5, y0:H * 0.5 + (Math.random() - 0.5) * 100,
+    x1:r.left + r.width * 0.6, y1:r.top + r.height * 0.6, t:-i * 0.022, lift:120 + Math.random() * 180});
 }
 function coinRain(n){
-  if (reduced) return;
-  const r = $('wallet').getBoundingClientRect(), W = fx.width, H = fx.height;
-  for (let i = 0; i < n; i++) coinsFx.push({x0:W / 2 + (Math.random() - 0.5) * W * 0.4, y0:H * 0.5 + (Math.random() - 0.5) * 80,
-    x1:r.left + r.width * 0.6, y1:r.top + r.height * 0.6, t:-i * 0.025, lift:120 + Math.random() * 160});
+  if (calm()) return;
+  for (let i = 0; i < n; i++) rain.push({x:Math.random() * fx.width, y:-20 - Math.random() * fx.height * 0.9, vy:7 + Math.random() * 9, ph:Math.random() * 6, r:8 + Math.random() * 7});
+}
+function firework(nx, ny, hue, n){
+  if (calm() || fw.length > 1600) return;
+  const x = nx * fx.width, y = ny * fx.height;
+  for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * 7.5; fw.push({x, y, px:x, py:y, vx:Math.cos(a) * sp, vy:Math.sin(a) * sp, life:38 + Math.random() * 42, hue:hue + (Math.random() - 0.5) * 40}); }
+  rings.push({x, y, r:6, vr:9, life:1, col:'hsl(' + hue + ' 100% 75%)', w:3});
+}
+function starBurst(nx, ny, n, hue){
+  if (calm()) return;
+  const x = nx * fx.width, y = ny * fx.height;
+  for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 1.5 + Math.random() * 6; stars.push({x, y, vx:Math.cos(a) * sp, vy:Math.sin(a) * sp - 1, s:5 + Math.random() * 11, life:1, rot:Math.random() * 3, hue}); }
+}
+function ring(nx, ny, col){ if (!calm()) rings.push({x:nx * fx.width, y:ny * fx.height, r:10, vr:26, life:1, col, w:8}); }
+function starPath(c, x, y, s, rot){
+  c.beginPath();
+  for (let i = 0; i < 8; i++) { const a = rot + i * Math.PI / 4, r = i % 2 ? s * 0.28 : s; c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  c.closePath();
 }
 function drawFx(dt, racing, u){
-  const W = fx.width, H = fx.height;
-  const lines = racing && !V.settled && !reduced;
-  if (!lines && !parts.length && !coinsFx.length && burst <= 0) { if (fxDirty) { fctx.clearRect(0, 0, W, H); fxDirty = false; } return; }
+  const W = fx.width, H = fx.height, R = V.race;
+  const hot = !!R && (S.streak >= 2 || R.gold);
+  const lines = racing && !V.settled && !calm();
+  // フィーバー中とゴールデンレースは、画面のあちこちで星がまたたく
+  if (hot && !calm() && Math.random() < 0.25) stars.push({x:Math.random() * W, y:Math.random() * H * 0.8, vx:0, vy:-0.4, s:4 + Math.random() * 9, life:1, rot:Math.random() * 3, hue:R.gold ? 50 : Math.random() * 360});
+  if (!lines && !parts.length && !coinsFx.length && !rain.length && !fw.length && !stars.length && !rings.length && burst <= 0) { if (fxDirty) { fctx.clearRect(0, 0, W, H); fxDirty = false; } return; }
   fxDirty = true;
   fctx.clearRect(0, 0, W, H);
-  if (lines || burst > 0) {                       // 集中線
+  hueSpin = (hueSpin + dt * 240) % 360;
+  if (lines || burst > 0) {                       // 集中線(フィーバー中と的中時は虹色)
     const int = burst > 0 ? 1 : 0.3 + 0.7 * u * u;
-    const n = Math.floor(14 + int * 46), cx = W / 2, cy = H * 0.46, RR = Math.hypot(W, H) / 2;
-    fctx.fillStyle = burst > 0 ? 'rgba(255,214,10,' + (0.5 * burst).toFixed(3) + ')' : '#ffffff';
+    const n = Math.floor(14 + int * 50), cx = W / 2, cy = H * 0.46, RR = Math.hypot(W, H) / 2;
     for (let i = 0; i < n; i++) {
       const ang = Math.random() * 6.283, r0 = RR * (0.62 + Math.random() * 0.3 - int * 0.22), wdt = (0.004 + Math.random() * 0.014) * (1 + int);
-      if (burst <= 0) fctx.globalAlpha = 0.07 + Math.random() * 0.2 * int;
+      fctx.fillStyle = burst > 0 ? 'hsl(' + ((hueSpin + i * 9) % 360) + ' 100% 65%)' : hot ? 'hsl(' + ((hueSpin + i * 14) % 360) + ' 100% 78%)' : '#ffffff';
+      fctx.globalAlpha = burst > 0 ? 0.5 * burst : 0.07 + Math.random() * 0.2 * int;
       fctx.beginPath();
       fctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0);
       fctx.lineTo(cx + Math.cos(ang - wdt) * RR * 1.1, cy + Math.sin(ang - wdt) * RR * 1.1);
@@ -705,8 +960,31 @@ function drawFx(dt, racing, u){
       fctx.fill();
     }
     fctx.globalAlpha = 1;
-    burst = Math.max(0, burst - dt * 1.6);
+    burst = Math.max(0, burst - dt * 1.1);
   }
+  // 光るもの(花火・星・輪)は加算合成
+  fctx.globalCompositeOperation = 'lighter';
+  fctx.lineWidth = 2.6;
+  for (const p of fw) {
+    p.px = p.x; p.py = p.y; p.x += p.vx; p.y += p.vy; p.vy += 0.07; p.vx *= 0.975; p.vy *= 0.975; p.life--;
+    fctx.strokeStyle = 'hsl(' + p.hue + ' 100% ' + (55 + Math.random() * 25) + '%)'; fctx.globalAlpha = clamp(p.life / 30, 0, 1);
+    fctx.beginPath(); fctx.moveTo(p.px, p.py); fctx.lineTo(p.x, p.y); fctx.stroke();
+  }
+  fw = fw.filter(p => p.life > 0);
+  for (const st of stars) {
+    st.x += st.vx; st.y += st.vy; st.vx *= 0.94; st.vy *= 0.94; st.life -= dt * 1.5; st.rot += dt * 3;
+    fctx.globalAlpha = clamp(st.life, 0, 1) * (0.6 + 0.4 * Math.sin(st.life * 30));
+    fctx.fillStyle = 'hsl(' + st.hue + ' 100% 78%)';
+    starPath(fctx, st.x, st.y, st.s * (0.5 + st.life * 0.5), st.rot); fctx.fill();
+  }
+  stars = stars.filter(st => st.life > 0);
+  for (const g of rings) {
+    g.r += g.vr; g.life -= dt * 2.2;
+    fctx.globalAlpha = clamp(g.life, 0, 1); fctx.strokeStyle = g.col; fctx.lineWidth = g.w * clamp(g.life, 0.1, 1);
+    fctx.beginPath(); fctx.arc(g.x, g.y, g.r, 0, 6.283); fctx.stroke();
+  }
+  rings = rings.filter(g => g.life > 0);
+  fctx.globalCompositeOperation = 'source-over'; fctx.globalAlpha = 1;
   for (const p of parts) {
     p.x += p.vx; p.y += p.vy; p.vy += 0.45; p.vx *= 0.985; p.rot += p.vr; p.life--;
     fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.rot);
@@ -715,32 +993,38 @@ function drawFx(dt, racing, u){
     fctx.restore();
   }
   parts = parts.filter(p => p.life > 0 && p.y < H + 30);
+  fctx.fillStyle = '#ffd60a'; fctx.strokeStyle = '#16130f'; fctx.lineWidth = 2;
+  for (const c of rain) {
+    c.y += c.vy; c.ph += 0.3;
+    fctx.beginPath(); fctx.ellipse(c.x, c.y, c.r, c.r * Math.abs(Math.cos(c.ph)) + 2, 0, 0, 6.283); fctx.fill(); fctx.stroke();
+  }
+  rain = rain.filter(c => c.y < H + 30);
   let arrived = false;
   for (const c of coinsFx) {
     c.t += dt * 1.5;
     if (c.t <= 0) continue;
     const k = Math.min(1, c.t), e = k * k * (3 - 2 * k);
     const x = c.x0 + (c.x1 - c.x0) * e, y = c.y0 + (c.y1 - c.y0) * e - Math.sin(k * Math.PI) * c.lift;
-    fctx.fillStyle = '#ffd60a'; fctx.strokeStyle = '#16130f'; fctx.lineWidth = 2;
     fctx.beginPath(); fctx.ellipse(x, y, 9, 9 * Math.abs(Math.cos(c.t * 9)) + 2, 0, 0, 6.283); fctx.fill(); fctx.stroke();
     if (k >= 1) { c.done = true; arrived = true; }
   }
   if (arrived) { sCoin(); const w = $('wallet'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
   coinsFx = coinsFx.filter(c => !c.done);
 }
-function flash(gold){
-  if (reduced) return;
-  const f = $('flash'); f.className = ''; void f.offsetWidth; f.className = gold ? 'go gold' : 'go';
+function flash(kind){
+  if (calm()) return;
+  const f = $('flash'); f.className = ''; void f.offsetWidth; f.className = 'go ' + kind;
 }
-function shake(){
-  if (reduced) return;
-  document.body.classList.remove('shake'); void document.body.offsetWidth; document.body.classList.add('shake');
-  setTimeout(() => document.body.classList.remove('shake'), 500);
+function shake(big){
+  if (calm()) return;
+  const B = document.body.classList;
+  B.remove('shake', 'shake2'); void document.body.offsetWidth; B.add(big ? 'shake2' : 'shake');
+  setTimeout(() => B.remove('shake', 'shake2'), big ? 900 : 500);
 }
 
 /* ================= HUD ================= */
 const elBash = $('bashira'), elPop = $('pop'), elDan = $('dan'), elCoins = $('coins'), elList = $('players'), elBoard = $('board'), elMap = $('map');
-let umaEls = [], voteSig = [], plSig = '', shownCoins = 1000, mapDots = [], roomOpen = false, autoOpened = false;
+let umaEls = [], tagEls = [], voteSig = [], tagSig = [], plSig = '', shownCoins = 1000, mapDots = [], roomOpen = false, autoOpened = false;
 
 function badge(no){
   const b = document.createElement('span');
@@ -753,16 +1037,43 @@ function buildMap(){
     const d = document.createElement('span'); d.className = 'dot'; d.textContent = String(i + 1);
     d.style.background = F.bg; d.style.color = F.fg; elMap.appendChild(d); return d;
   });
+  tagEls = FRAME.map(() => { const t = document.createElement('span'); t.className = 'tag3d'; $('tags').appendChild(t); return t; });
+}
+function toast(text, kind){
+  const box = $('toasts'), t = document.createElement('div');
+  t.className = 'toast ' + (kind || ''); t.textContent = text;
+  box.appendChild(t);
+  while (box.childElementCount > 4) box.firstElementChild.remove();
+  setTimeout(() => t.remove(), 3600);
+  if (kind !== 'join') sToast();
+}
+function callout(text, kind){
+  const box = $('callouts'), c = document.createElement('span');
+  c.className = 'callout ' + kind; c.textContent = text;
+  box.appendChild(c);
+  while (box.childElementCount > 4) box.firstElementChild.remove();
+  setTimeout(() => c.remove(), 1100);
+}
+// 発走の瞬間、自分の馬の名前が画面を横切る
+function cutIn(L){
+  if (calm()) return;
+  const el = $('cutin'), h = V.race.hs[L.h - 1], no = $('cutNo');
+  no.textContent = String(L.h); no.style.background = FRAME[L.h - 1].bg; no.style.color = FRAME[L.h - 1].fg;
+  $('cutName').textContent = h.name;
+  $('cutSay').textContent = L.all ? '全ツッパ!!' : h.odds >= 15 ? '大穴いけ!!' : '行け!!';
+  el.className = ''; void el.offsetWidth; el.className = L.all ? 'go all' : 'go';
 }
 function renderRound(){
+  const R = V.race;
   elPop.className = 'pop'; $('popA').textContent = ''; $('popB').textContent = ''; $('popC').textContent = '';
-  elBoard.hidden = true;
+  elBoard.hidden = true; $('burst').className = '';
   document.body.classList.remove('lost');
   setText($('caster'), '');
-  voteSig = [];
-  umaEls = V.race.hs.map(h => {
+  voteSig = []; tagSig = [];
+  umaEls = R.hs.map((h, i) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'uma'; b.id = 'uma' + h.no;
+    b.type = 'button'; b.className = 'uma' + (h.odds >= 15 ? ' ana' : ''); b.id = 'uma' + h.no;
+    b.style.setProperty('--i', String(i));
     b.setAttribute('aria-pressed', 'false');
     b.setAttribute('aria-label', h.no + '番 ' + h.name + ' ' + h.style + ' 単勝' + h.odds.toFixed(1) + '倍');
     const waku = document.createElement('span'); waku.className = 'waku'; waku.textContent = String(h.no);
@@ -778,7 +1089,11 @@ function renderRound(){
     return b;
   });
   elBash.replaceChildren(...umaEls);
-  if (G) for (const H of G.horses) { const c = COATS[V.race.hs[H.no - 1].coat]; H.mBody.color.set(c.body); H.mDark.color.set(c.dark); }
+  if (G) for (const H of G.horses) { const c = COATS[R.hs[H.no - 1].coat]; H.mBody.color.set(c.body); H.mDark.color.set(c.dark); }
+  if (R.gold && !V.late) {
+    toast('ゴールデンレース! このレースは払戻2倍', 'gold');
+    if (!calm()) { flash('gold'); for (let i = 0; i < 5; i++) setTimeout(() => starBurst(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.3, 14, 50), i * 120); }
+  }
 }
 function renderBoard(){
   const R = V.race, kids = [];
@@ -796,30 +1111,40 @@ function renderBoard(){
   elBoard.replaceChildren(...kids);
   elBoard.hidden = false;
 }
+// 払戻の倍率で演出が4段階に変わる
 function celebrate(res){
   const a = $('popA'), b = $('popB'), c = $('popC');
   const R = V.race;
   setText($('caster'), R.hs[R.order[0] - 1].name + ' ゴールイン!');
   sGoal(); kick3D(1);
+  ring(0.5, 0.46, '#ffffff');
   if (A.ctx) A.mfilt.frequency.setTargetAtTime(15000, A.ctx.currentTime, 0.05);
   let cls = 'pop show';
-  if (!res) { a.textContent = ''; b.textContent = ''; c.textContent = ''; flash(false); elPop.className = cls; return; }
+  if (!res) { a.textContent = ''; b.textContent = ''; c.textContent = ''; flash(''); elPop.className = cls; return; }
   if (res.type === 'win') {
-    const big = res.odds >= 10;
-    a.textContent = big ? '大穴的中!!' : '的中!!';
-    b.textContent = '+' + fmt(res.pay);
-    c.textContent = (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.mult > 1 ? ' 連勝ボーナス×' + res.mult : '');
-    flash(true); shake(); burst = 1;
-    confetti(big ? 260 : 110);
-    coinRain(big ? 46 : 22);
-    sWin(big);
+    const tr = res.tier;
+    a.textContent = ['', '的中!!', '大的中!!', '大穴的中!!', '万馬券級!!!'][tr];
+    b.textContent = '+0';
+    V.payAnim = {to:res.pay, t0:performance.now(), dur:500 + tr * 250, last:-1};
+    c.textContent = (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.mult > 1 ? ' ボーナス×' + res.mult : '');
+    cls += ' t' + tr;
+    flash(tr >= 3 ? 'rainbow' : 'gold'); shake(tr >= 3); burst = 1;
+    $('burst').className = calm() ? '' : 'on' + (tr >= 3 ? ' rainbow' : '');
+    confetti([0, 120, 190, 300, 460][tr]);
+    coinFly([0, 22, 32, 46, 64][tr]);
+    if (tr >= 2) coinRain([0, 0, 40, 90, 170][tr]);
+    const shots = [0, 3, 5, 9, 16][tr];
+    for (let i = 0; i < shots; i++) setTimeout(() => firework(0.12 + Math.random() * 0.76, 0.1 + Math.random() * 0.32, Math.random() * 360, 50 + tr * 14), 120 + i * (1900 / shots));
+    starBurst(0.5, 0.42, 16 + tr * 8, 50);
+    sWin(tr); if (tr >= 3) sHorn();
+    buzz(tr >= 3 ? [60, 40, 60, 40, 200] : [40, 30, 90]);
   } else if (res.bust) {
     cls += ' lose bust'; a.textContent = '破産!'; b.textContent = 'おこづかい +1,000'; c.textContent = '';
-    flash(false); document.body.classList.add('lost'); sBust();
+    flash(''); document.body.classList.add('lost'); sBust(); buzz(200);
   } else {
     cls += ' lose'; a.textContent = 'ハズレ'; b.textContent = '−' + fmt(res.bet);
     c.textContent = res.rank === 2 ? '惜しい!' + R.margin + 'の2着' : '';
-    flash(false); document.body.classList.add('lost'); sLose();
+    flash(''); document.body.classList.add('lost'); sLose();
   }
   elPop.className = cls;
 }
@@ -833,28 +1158,45 @@ function shout(text, hue){
   while (elDan.childElementCount > 16) elDan.firstElementChild.remove();
 }
 function ui(ps, now){
+  const R = V.race;
   const multi = ps.filter(p => !p.away).length > 1;
   const canBet = V.ph === 'bet' && !V.late;
   const inRound = p => !!(p.pick && p.pick.n === V.n && p.pick.s === V.seed);
-  const B = document.body.classList;
+  const B = document.body.classList, quiet = calm();
+  const live = V.ph === 'run' && !V.settled && !V.late;
   B.toggle('is-bet', V.ph === 'bet'); B.toggle('is-late', V.late);
-  B.toggle('is-run', V.ph === 'run' && !V.settled && !V.late);
+  B.toggle('is-run', live);
   B.toggle('is-res', V.ph === 'run' && V.settled && !V.late);
-  B.toggle('tense', V.ph === 'run' && !V.settled && !V.late && (V.slow || !!(V.locked && V.locked.all)) && !reduced);
+  B.toggle('tense', live && (V.slow || !!(V.locked && V.locked.all)) && !quiet);
+  B.toggle('slow', live && V.slow && !quiet);
+  B.toggle('is-fever', S.streak >= 2 && !quiet);
+  B.toggle('is-gold', !!R.gold && !quiet);
+  B.toggle('calm', quiet);
+  A.fever = S.streak >= 2;
   setText($('raceNo'), '第' + V.n + 'R');
   const fv = $('fever'), mult = streakMult(S.streak);
   fv.hidden = mult === 1; setText(fv, mult >= 1.5 ? 'FEVER 払戻×1.5' : '連勝ボーナス×1.2');
+  const lv = lvOf(S.xp), base = lv > 1 ? xpNeed(lv - 1) : 0;
+  setText($('lvText'), 'Lv.' + lv + ' ' + titleOf(lv));
+  $('xpBar').style.width = (clamp((S.xp - base) / (xpNeed(lv) - base), 0, 1) * 100).toFixed(1) + '%';
 
   const myH = me.pick && inRound({pick:me.pick}) ? me.pick.h : 0;
   umaEls.forEach((el, i) => {
     const no = i + 1, pressed = String(no === myH);
     if (el.getAttribute('aria-pressed') !== pressed) el.setAttribute('aria-pressed', pressed);
     if (el.disabled !== !canBet) el.disabled = !canBet;
-    const hues = ps.filter(p => inRound(p) && p.pick.h === no).map(p => p.hue).slice(0, 5);
-    const sig = hues.join(',');
+    const on = ps.filter(p => inRound(p) && p.pick.h === no);
+    const sig = on.map(p => p.hue).slice(0, 5).join(',');
     if (voteSig[i] !== sig) {
       voteSig[i] = sig;
-      el.lastElementChild.replaceChildren(...hues.map(h => { const d = document.createElement('i'); d.style.background = 'hsl(' + h + ' 85% 55%)'; return d; }));
+      el.lastElementChild.replaceChildren(...on.slice(0, 5).map(p => { const d = document.createElement('i'); d.style.background = 'hsl(' + p.hue + ' 85% 55%)'; return d; }));
+    }
+    // 3Dの名札
+    const names = on.map(p => p.isMe ? 'あなた' : p.nick), tsig = names.join('|');
+    if (tagSig[i] !== tsig && tagEls[i]) {
+      tagSig[i] = tsig;
+      tagEls[i].textContent = names.length ? names.slice(0, 2).join('・') + (names.length > 2 ? ' +' + (names.length - 2) : '') : '';
+      tagEls[i].classList.toggle('mine', on.some(p => p.isMe));
     }
   });
   mapDots.forEach((d, i) => d.classList.toggle('mine', i + 1 === myHorseNo()));
@@ -865,12 +1207,15 @@ function ui(ps, now){
     const any = ps.some(inRound);
     if (!any) V.firstPick = 0; else if (!V.firstPick) V.firstPick = now;
     const left = any ? Math.max(0, GRACE_MS - (now - V.firstPick)) : GRACE_MS;
-    if (!multi) text = A.ctx ? '馬をタップ。その瞬間に発走' : '馬をタップ。その瞬間に発走(BGMも鳴ります)';
+    const quick = !myH && now - V.betStart <= QUICK_MS;
+    if (!multi) text = quick ? '馬をタップで即発走。いまなら「秒で決断」×1.1' : A.ctx ? '馬をタップ。その瞬間に発走' : '馬をタップ。その瞬間に発走(BGMも鳴ります)';
     else if (myH) { text = '投票ずみ。全員そろうか、あと' + Math.ceil(left / 1000) + '秒で発走'; fuse = left / GRACE_MS; }
     else if (any) { text = '急げ!締切まで' + Math.ceil(left / 1000) + '秒'; fuse = left / GRACE_MS; }
     else text = '馬をタップで投票。全員そろうか、最初の1人から5秒で発走';
+    if (R.gold) text = 'ゴールデンレース 払戻×2|' + text;
   }
   setText($('callText'), text);
+  $('call').classList.toggle('gold', !!R.gold);
   $('fuse').style.width = (fuse * 100).toFixed(1) + '%';
   document.querySelectorAll('.chip').forEach(c => {
     const on = String(String(S.bet) === c.dataset.bet);
@@ -889,9 +1234,10 @@ function ui(ps, now){
   setText($('stStreak'), String(S.streak));
   setText($('stBest'), fmt(S.best));
   setText($('stBust'), S.busts + '回');
+  setText($('stAch'), Object.keys(S.ach).length + '/' + Object.keys(ACH).length);
 
   const rows = ps.slice().sort((a, b) => (b.coins - a.coins) || (a.peer < b.peer ? -1 : 1));
-  const sig = JSON.stringify(rows.map(p => [p.peer, p.nick, p.hue, p.coins, p.away, p.sit, inRound(p) ? [p.pick.h, p.pick.bet] : 0, canBet]));
+  const sig = JSON.stringify(rows.map(p => [p.peer, p.nick, p.hue, p.coins, p.lv, p.away, p.sit, inRound(p) ? [p.pick.h, p.pick.bet] : 0, canBet]));
   if (sig !== plSig) {
     plSig = sig;
     elList.replaceChildren(...rows.map((p, i) => {
@@ -899,7 +1245,7 @@ function ui(ps, now){
       const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = String(i + 1);
       const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = 'hsl(' + p.hue + ' 85% 55%)';
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.nick;
-      if (p.isMe) { const y = document.createElement('small'); y.textContent = 'あなた'; nm.appendChild(y); }
+      const y = document.createElement('small'); y.textContent = (p.isMe ? 'あなた ' : '') + 'Lv.' + p.lv; nm.appendChild(y);
       const pk = document.createElement('span'); pk.className = 'pk';
       if (inRound(p)) pk.append(badge(p.pick.h), document.createTextNode(fmt(p.pick.bet)));
       else pk.textContent = p.away ? '離席' : p.sit ? '見' : canBet ? '考え中' : '';
@@ -909,43 +1255,58 @@ function ui(ps, now){
     }));
   }
 }
-// レース中の毎フレーム更新(順位・実況・コース図)
-function liveHud(racing, t, tau){
+// レース中の毎フレーム更新(順位・実況・コース図・払戻のカウントアップ)
+function liveHud(now, racing, t, tau){
   if (!V.race) return;
   const R = V.race;
   for (let i = 0; i < 6; i++) {
     const p = racing ? Math.min(1.03, prog(R.hs[i], tau)) : 0;
     mapDots[i].style.left = (p / 1.03 * 100).toFixed(2) + '%';
   }
+  if (V.payAnim) {
+    const P = V.payAnim, k = clamp((now - P.t0) / P.dur, 0, 1), step = Math.floor(k * 14);
+    setText($('popB'), '+' + fmt(Math.floor(P.to * (1 - Math.pow(1 - k, 3)))));
+    if (step !== P.last) { P.last = step; sTick(k); }
+    if (k >= 1) V.payAnim = null;
+  }
   if (!racing) return;
   const key = h => tau >= h.T ? 10 - h.T : prog(h, tau);
   const sorted = R.hs.slice().sort((a, b) => key(b) - key(a));
   const leadNo = sorted[0].no, u = tau / R.tWin;
   const slow = t >= R.a && t < R.a + R.slowDisp;
-  if (slow && !V.slow && A.ctx) A.mfilt.frequency.setTargetAtTime(380, A.ctx.currentTime, 0.07);
+  if (slow && !V.slow && !V.settled) {
+    if (A.ctx) A.mfilt.frequency.setTargetAtTime(380, A.ctx.currentTime, 0.07);
+    sRoll(); callout('勝負所!!', 'lead');
+  }
   V.slow = slow;
   const myH = myHorseNo();
   if (!V.settled) {
-    if (u >= 0.78 && !V.stretch) { V.stretch = true; setText($('caster'), '最後の直線!先頭は' + leadNo + '番 ' + R.hs[leadNo - 1].name); }
-    else if (leadNo !== V.lead && tau > 0.6) setText($('caster'), (V.stretch ? '' : '') + leadNo + '番 ' + R.hs[leadNo - 1].name + (V.lead ? ' かわして先頭!' : ' 先頭!'));
+    if (u >= 0.78 && !V.stretch) { V.stretch = true; setText($('caster'), '最後の直線!先頭は' + leadNo + '番 ' + R.hs[leadNo - 1].name); cheer(0.16); }
+    else if (leadNo !== V.lead && tau > 0.6) setText($('caster'), leadNo + '番 ' + R.hs[leadNo - 1].name + (V.lead ? ' かわして先頭!' : ' 先頭!'));
     if (slow && R.photo) setText($('caster'), 'これは際どい!写真判定か!');
   }
   V.lead = leadNo;
   const rk = $('rank'), si = $('stakeInfo');
   if (myH) {
-    const h = R.hs[myH - 1], r = sorted.findIndex(x => x.no === myH) + 1;
-    const txt = tau >= h.T ? h.rank + '着' : r === 1 ? '先頭!!' : r + '番手';
+    const h = R.hs[myH - 1], r = sorted.findIndex(x => x.no === myH) + 1, done = tau >= h.T;
     if (r !== V.myRank) {
-      if (V.myRank) sRank(r < V.myRank);
+      if (V.myRank && !done && tau > 0.5 && now - V.calloutAt > 320) {
+        V.calloutAt = now;
+        if (r < V.myRank) {
+          if (r === 1) { callout('先頭だ!!', 'lead'); sLead(); flash('soft'); starBurst(0.16, 0.8, 16, 50); buzz(25); }
+          else { callout('↑ かわした! ' + r + '番手', 'up'); sRank(true); }
+          addXp(2);
+        } else { callout('↓ 抜かれた', 'down'); sRank(false); }
+      }
       V.myRank = r; rk.classList.remove('bump'); void rk.offsetWidth; rk.classList.add('bump');
     }
-    setText(rk, txt); rk.classList.toggle('first', r === 1);
-    if (V.locked) setText(si, myH + '番に' + fmt(V.locked.bet) + (V.locked.all ? '(全ツッパ)' : '') + ' 当たれば +' + fmt(Math.floor(V.locked.bet * V.locked.odds * V.locked.mult)));
+    setText(rk, done ? h.rank + '着' : r === 1 ? '先頭!!' : r + '番手'); rk.classList.toggle('first', r === 1);
+    if (V.locked) setText(si, myH + '番に' + fmt(V.locked.bet) + (V.locked.all ? '(全ツッパ)' : '') + ' 当たれば +' + fmt(Math.floor(V.locked.bet * V.locked.odds * V.locked.mult)) + (V.locked.mult > 1 ? '(ボーナス×' + V.locked.mult + ')' : ''));
   } else { setText(rk, ''); setText(si, '見学中'); }
 }
 
 /* ================= メインループ ================= */
-let lastFrame = performance.now();
+let lastFrame = performance.now(), beatShown = -1;
 function frame(){
   const now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
@@ -953,11 +1314,14 @@ function frame(){
   const t = racing ? (now - V.raceStart) / 1000 : 0;
   const tau = racing ? warp(V.race, t) : 0;
   if (racing && !V.settled && t >= V.race.tSettle) settle(false);
-  liveHud(racing, t, tau);
+  beatFrame(now, dt);
+  liveHud(now, racing, t, tau);
   update3D(now, dt, racing, t, tau);
   const u = racing ? clamp(tau / V.race.tWin, 0, 1) : 0;
   drawFx(dt, racing, u);
   audioFrame(racing && !V.settled, racing && V.slow && !V.settled, u);
+  const bq = Math.round(beat * 5);
+  if (bq !== beatShown) { beatShown = bq; document.documentElement.style.setProperty('--beat', (bq / 5).toFixed(1)); }
   if (Math.abs(S.coins - shownCoins) > 0.5) shownCoins += (S.coins - shownCoins) * 0.14; else shownCoins = S.coins;
   setText(elCoins, fmt(shownCoins));
   requestAnimationFrame(frame);
@@ -967,6 +1331,7 @@ function frame(){
 function inviteUrl(code){
   const u = new URL(window.location.href);
   u.hash = '';
+  u.searchParams.delete('relay');
   if (code === 'lobby') u.searchParams.delete('room'); else u.searchParams.set('room', code);
   return u.toString();
 }
@@ -993,12 +1358,13 @@ function start(){
   $('nick').addEventListener('input', e => { S.nick = clean(e.target.value) || 'ななし'; save(); pushPresence(); });
   const paintTools = () => {
     $('btnBgm').setAttribute('aria-pressed', String(S.bgm)); $('btnSfx').setAttribute('aria-pressed', String(S.sfx));
+    $('btnFx').setAttribute('aria-pressed', String(!S.calm)); setText($('btnFx'), S.calm ? '演出ひかえめ' : '演出全開');
     $('btnRoom').setAttribute('aria-pressed', String(roomOpen)); document.body.classList.toggle('room-open', roomOpen);
     if (A.ctx) { A.music.gain.setTargetAtTime(S.bgm ? 0.55 : 0, A.ctx.currentTime, 0.03); A.sfx.gain.setTargetAtTime(S.sfx ? 0.9 : 0, A.ctx.currentTime, 0.03); }
   };
-  roomOpen = false;
   $('btnBgm').addEventListener('click', () => { S.bgm = !S.bgm; save(); audioUnlock(); paintTools(); });
   $('btnSfx').addEventListener('click', () => { S.sfx = !S.sfx; save(); audioUnlock(); paintTools(); sClick(); });
+  $('btnFx').addEventListener('click', () => { S.calm = !S.calm; save(); paintTools(); sClick(); });
   $('btnRoom').addEventListener('click', () => { roomOpen = !roomOpen; paintTools(); });
   paintTools();
   document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => setBet(c.dataset.bet === 'all' ? 'all' : Number(c.dataset.bet))));
