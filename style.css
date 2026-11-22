@@ -668,3 +668,66 @@ body.omen-stop .hud .live,body.omen-stop .caster,body.omen-stop #say,body.omen-s
 
 #omen{z-index:7}
 #omen b{-webkit-text-stroke:3px #16130f}
+
+/* ================= v10: 伝説(勝利確定)の暗転演出 ================= */
+body.legend-bg{background:#000}
+/* プチュン!:画面が横一本の線になり、点になって消える */
+body.crt-off #gl,body.crt-off #fx,body.crt-off .hud,body.crt-off #frame,body.crt-off #vig,body.crt-off .bar{animation:crtOff .38s cubic-bezier(.7,0,.9,.5) forwards;transform-origin:50% 50%}
+body.crt-hide #gl,body.crt-hide #fx,body.crt-hide .hud,body.crt-hide #frame,body.crt-hide #vig,body.crt-hide .bar{visibility:hidden}
+body.crt-on #gl,body.crt-on #fx,body.crt-on .hud,body.crt-on #frame{animation:crtOn .32s cubic-bezier(.2,.8,.3,1) both;transform-origin:50% 50%}
+body.crt-fade #gl,body.crt-fade .hud,body.crt-fade #fx{transition:opacity .35s;opacity:0}
+body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .35s both}
+@keyframes crtOff{0%{transform:scale(1,1);filter:brightness(1)}48%{transform:scale(1,.006);filter:brightness(3) saturate(0)}100%{transform:scale(0,.006);filter:brightness(5) saturate(0)}}
+@keyframes crtOn{0%{transform:scale(0,.006);filter:brightness(5)}45%{transform:scale(1,.006);filter:brightness(3)}100%{transform:scale(1,1);filter:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+#legend{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;overflow:hidden}
+#legend.go{display:block;animation:lgBg 3.3s linear forwards}
+@keyframes lgBg{0%{background:transparent}11%{background:#000}84%{background:#000}100%{background:transparent}}
+/* 消える瞬間の十字の閃光 */
+#legend .cross{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}
+#legend .cross::before,#legend .cross::after{content:"";position:absolute;background:#fff;box-shadow:0 0 18px 4px #fff,0 0 40px 10px rgba(160,220,255,.8)}
+#legend .cross::before{left:-50vw;width:100vw;top:-2px;height:4px}
+#legend .cross::after{top:-50vh;height:100vh;left:-2px;width:4px}
+#legend.go .cross{animation:lgCross .5s .3s ease-out forwards}
+@keyframes lgCross{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.02)}}
+/* 暗闇に走る虹のひび */
+#legend .crack{position:absolute;left:50%;top:50%;width:80vw;height:3px;margin-left:-40vw;opacity:0;transform:scaleX(0) rotate(-8deg);
+  background:linear-gradient(90deg,transparent,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,transparent);box-shadow:0 0 16px rgba(255,255,255,.8)}
+#legend.go .crack{animation:lgCrack 3.3s linear both}
+@keyframes lgCrack{0%,27%{opacity:0;transform:scaleX(0) rotate(-8deg)}33%{opacity:1;transform:scaleX(1) rotate(-8deg)}38%{opacity:0;transform:scaleX(1.4) rotate(-8deg)}100%{opacity:0}}
+/* 回る虹の後光 */
+#legend .lgRays{position:absolute;left:50%;top:46%;width:130vmin;height:130vmin;margin:-65vmin 0 0 -65vmin;opacity:0;border-radius:50%;
+  background:repeating-conic-gradient(rgba(255,45,61,.55) 0 6deg,rgba(255,214,10,.55) 6deg 12deg,rgba(61,255,138,.55) 12deg 18deg,rgba(45,226,255,.55) 18deg 24deg,rgba(177,76,255,.55) 24deg 30deg,transparent 30deg 40deg);
+  -webkit-mask-image:radial-gradient(circle,#000 0,rgba(0,0,0,.6) 35%,transparent 68%);mask-image:radial-gradient(circle,#000 0,rgba(0,0,0,.6) 35%,transparent 68%)}
+#legend.go .lgRays{animation:lgRays 3.3s linear both,spin 6s linear infinite}
+@keyframes lgRays{0%,38%{opacity:0}46%,82%{opacity:1}92%,100%{opacity:0}}
+/* 「伝」「説」 */
+#legend .chars{position:absolute;left:0;right:0;top:44%;transform:translateY(-50%);display:flex;justify-content:center;gap:2vw}
+#legend .chars b{font-family:var(--font-display);font-weight:400;font-size:clamp(110px,30vw,300px);line-height:1;color:#fff;opacity:0;
+  background:linear-gradient(180deg,#fff 10%,#ffe14a 45%,#ff9a1a 70%,#ff2d3d);-webkit-background-clip:text;background-clip:text;color:transparent;
+  -webkit-text-stroke:3px #fff;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,214,10,.8))}
+#legend.go .chars b:nth-child(1){animation:lgChar 3.3s linear both,lgGlow .14s 1.35s 6 alternate}
+#legend.go .chars b:nth-child(2){animation:lgChar2 3.3s linear both,lgGlow .14s 1.6s 6 alternate}
+@keyframes lgChar{0%,38%{opacity:0;transform:scale(3.5) rotate(-8deg)}42%{opacity:1;transform:scale(.9) rotate(-4deg)}45%,82%{opacity:1;transform:scale(1) rotate(-4deg)}90%,100%{opacity:0;transform:scale(1.6) rotate(-4deg)}}
+@keyframes lgChar2{0%,46%{opacity:0;transform:scale(3.5) rotate(8deg)}50%{opacity:1;transform:scale(.9) rotate(4deg)}53%,82%{opacity:1;transform:scale(1) rotate(4deg)}90%,100%{opacity:0;transform:scale(1.6) rotate(4deg)}}
+@keyframes lgGlow{from{filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,214,10,.8))}to{filter:drop-shadow(0 0 40px #fff) drop-shadow(0 0 90px rgba(255,90,200,1))}}
+/* 能力名と騎手 */
+#legend .lgWho{position:absolute;left:0;right:0;top:calc(44% + clamp(70px,17vw,170px));display:flex;justify-content:center;align-items:center;gap:10px;opacity:0;color:#fff;font-weight:900;font-size:clamp(13px,3.4vw,20px)}
+#legend .lgWho .face{width:clamp(34px,8vw,52px);height:clamp(34px,8vw,52px);border-radius:6px;border:2px solid #fff;position:relative;background:linear-gradient(hsl(var(--h,40) 80% 48%) 0 42%,#e8c9a8 42% 72%,hsl(var(--h,40) 80% 48%) 72%)}
+#legend .lgWho .face::after{content:"";position:absolute;left:18%;right:18%;top:52%;height:12%;background:#000}
+#legend .lgName{position:absolute;left:0;right:0;top:calc(44% + clamp(118px,27vw,240px));margin:0;text-align:center;opacity:0;font-family:var(--font-display);font-size:clamp(28px,8vw,64px);line-height:1.1;
+  background:linear-gradient(90deg,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,#ff2d3d);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(3px 3px 0 #000)}
+#legend.go .lgWho{animation:lgName 3.3s linear both}
+#legend.go .lgName{animation:lgName 3.3s linear both,slide 1s linear infinite}
+@keyframes lgName{0%,55%{opacity:0;transform:translateY(16px)}60%,82%{opacity:1;transform:none}90%,100%{opacity:0}}
+/* 演出ひかえめ:暗転と文字だけ */
+#legend.calm .cross,#legend.calm .crack,#legend.calm .lgRays{display:none}
+#legend.calm .chars b{animation:lgChar 3.3s steps(1,end) both;filter:none}
+#legend.calm .chars b:nth-child(2){animation:lgChar2 3.3s steps(1,end) both}
+#legend.calm .lgName{animation:lgName 3.3s steps(1,end) both}
+@media (prefers-reduced-motion:reduce){
+  body.crt-off #gl,body.crt-off #fx,body.crt-off .hud,body.crt-off #frame,body.crt-on #gl,body.crt-on #fx,body.crt-on .hud,body.crt-on #frame{animation:none}
+  #legend .lgRays{animation:lgRays 3.3s linear both}
+  #legend .chars b,#legend .lgName{animation-iteration-count:1!important}
+}
