@@ -882,7 +882,7 @@ function ui(ps, now){
   setText(netEl, !net ? '接続の準備中' : n > 1 ? n + '人が同じレースに参加中' : (roomCode === 'lobby' ? 'みんなの部屋' : '部屋「' + roomCode + '」') + 'で待機中。URLを送ると合流できます');
   if (net && net.diag) {
     const d = net.diag();
-    setText($('diag'), '合図の中継 Nostr ' + d.nostr.open + '/' + d.nostr.total + '・MQTT ' + d.mqtt.open + '/' + d.mqtt.total + ' 直結 ' + (d.links.nostr + d.links.mqtt) + '本');
+    setText($('diag'), '合図の中継 Nostr ' + d.nostr.open + '/' + d.nostr.total + '・MQTT ' + d.mqtt.open + '/' + d.mqtt.total + ' 直結 ' + (d.links.nostr + d.links.mqtt) + '本' + (d.errors.length ? ' / ' + d.errors.slice(-3).join(' ') : ''));
   }
   setText($('btnRoom'), n > 1 ? '部屋 ' + n + '人' : '友だちを呼ぶ');
   if (n > 1 && !autoOpened) { autoOpened = true; if (window.innerWidth >= 900 && !roomOpen) $('btnRoom').click(); }
