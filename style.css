@@ -682,7 +682,7 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 #legend{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;overflow:hidden}
-#legend.go{display:block;animation:lgBg 3.3s linear forwards}
+#legend.go{display:block;animation:lgBg var(--lgD,3.3s) linear forwards}
 @keyframes lgBg{0%{background:transparent}11%{background:#000}84%{background:#000}100%{background:transparent}}
 /* 消える瞬間の十字の閃光 */
 #legend .cross{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}
@@ -694,21 +694,21 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 /* 暗闇に走る虹のひび */
 #legend .crack{position:absolute;left:50%;top:50%;width:80vw;height:3px;margin-left:-40vw;opacity:0;transform:scaleX(0) rotate(-8deg);
   background:linear-gradient(90deg,transparent,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,transparent);box-shadow:0 0 16px rgba(255,255,255,.8)}
-#legend.go .crack{animation:lgCrack 3.3s linear both}
+#legend.go .crack{animation:lgCrack var(--lgD,3.3s) linear both}
 @keyframes lgCrack{0%,27%{opacity:0;transform:scaleX(0) rotate(-8deg)}33%{opacity:1;transform:scaleX(1) rotate(-8deg)}38%{opacity:0;transform:scaleX(1.4) rotate(-8deg)}100%{opacity:0}}
 /* 回る虹の後光 */
 #legend .lgRays{position:absolute;left:50%;top:46%;width:130vmin;height:130vmin;margin:-65vmin 0 0 -65vmin;opacity:0;border-radius:50%;
   background:repeating-conic-gradient(rgba(255,45,61,.55) 0 6deg,rgba(255,214,10,.55) 6deg 12deg,rgba(61,255,138,.55) 12deg 18deg,rgba(45,226,255,.55) 18deg 24deg,rgba(177,76,255,.55) 24deg 30deg,transparent 30deg 40deg);
   -webkit-mask-image:radial-gradient(circle,#000 0,rgba(0,0,0,.6) 35%,transparent 68%);mask-image:radial-gradient(circle,#000 0,rgba(0,0,0,.6) 35%,transparent 68%)}
-#legend.go .lgRays{animation:lgRays 3.3s linear both,spin 6s linear infinite}
+#legend.go .lgRays{animation:lgRays var(--lgD,3.3s) linear both,spin 6s linear infinite}
 @keyframes lgRays{0%,38%{opacity:0}46%,82%{opacity:1}92%,100%{opacity:0}}
 /* 「伝」「説」 */
 #legend .chars{position:absolute;left:0;right:0;top:44%;transform:translateY(-50%);display:flex;justify-content:center;gap:2vw}
 #legend .chars b{font-family:var(--font-display);font-weight:400;font-size:clamp(110px,30vw,300px);line-height:1;color:#fff;opacity:0;
   background:linear-gradient(180deg,#fff 10%,#ffe14a 45%,#ff9a1a 70%,#ff2d3d);-webkit-background-clip:text;background-clip:text;color:transparent;
   -webkit-text-stroke:3px #fff;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,214,10,.8))}
-#legend.go .chars b:nth-child(1){animation:lgChar 3.3s linear both,lgGlow .14s 1.35s 6 alternate}
-#legend.go .chars b:nth-child(2){animation:lgChar2 3.3s linear both,lgGlow .14s 1.6s 6 alternate}
+#legend.go .chars b:nth-child(1){animation:lgChar var(--lgD,3.3s) linear both,lgGlow .14s 1.35s 6 alternate}
+#legend.go .chars b:nth-child(2){animation:lgChar2 var(--lgD,3.3s) linear both,lgGlow .14s 1.6s 6 alternate}
 @keyframes lgChar{0%,38%{opacity:0;transform:scale(3.5) rotate(-8deg)}42%{opacity:1;transform:scale(.9) rotate(-4deg)}45%,82%{opacity:1;transform:scale(1) rotate(-4deg)}90%,100%{opacity:0;transform:scale(1.6) rotate(-4deg)}}
 @keyframes lgChar2{0%,46%{opacity:0;transform:scale(3.5) rotate(8deg)}50%{opacity:1;transform:scale(.9) rotate(4deg)}53%,82%{opacity:1;transform:scale(1) rotate(4deg)}90%,100%{opacity:0;transform:scale(1.6) rotate(4deg)}}
 @keyframes lgGlow{from{filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,214,10,.8))}to{filter:drop-shadow(0 0 40px #fff) drop-shadow(0 0 90px rgba(255,90,200,1))}}
@@ -718,16 +718,32 @@ body.crt-fadein #gl,body.crt-fadein .hud,body.crt-fadein #fx{animation:fadeIn .3
 #legend .lgWho .face::after{content:"";position:absolute;left:18%;right:18%;top:52%;height:12%;background:#000}
 #legend .lgName{position:absolute;left:0;right:0;top:calc(44% + clamp(118px,27vw,240px));margin:0;text-align:center;opacity:0;font-family:var(--font-display);font-size:clamp(28px,8vw,64px);line-height:1.1;
   background:linear-gradient(90deg,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,#ff2d3d);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(3px 3px 0 #000)}
-#legend.go .lgWho{animation:lgName 3.3s linear both}
-#legend.go .lgName{animation:lgName 3.3s linear both,slide 1s linear infinite}
+#legend.go .lgWho{animation:lgName var(--lgD,3.3s) linear both}
+#legend.go .lgName{animation:lgName var(--lgD,3.3s) linear both,slide 1s linear infinite}
 @keyframes lgName{0%,55%{opacity:0;transform:translateY(16px)}60%,82%{opacity:1;transform:none}90%,100%{opacity:0}}
+/* 馬主の救済:セリフを読めるように長めに出す */
+#legend.owner .chars b{background:linear-gradient(180deg,#fff 10%,#ffe9a8 40%,#e8b23a 70%,#9a6a10);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,190,60,.85))}
+#legend.owner .lgName{font-size:clamp(15px,4.6vw,42px);padding:0 3vw;line-height:1.25;animation:lgOwn var(--lgD,4.6s) linear both,slide 1s linear infinite}
+#legend.owner .lgWho{animation:lgOwn var(--lgD,4.6s) linear both}
+#legend.owner .lgWho .face{background:linear-gradient(#1b1b1b 0 40%,#e8c9a8 40% 74%,#c9a24a 74%)}
+#legend.owner .lgWho .face::before{content:"";position:absolute;left:-14%;right:-14%;top:30%;height:12%;background:#1b1b1b}
+#legend.calm.owner .lgName,#legend.calm.owner .lgWho{animation:lgOwn var(--lgD,4.6s) steps(1,end) both}
+@keyframes lgOwn{0%,50%{opacity:0;transform:translateY(16px)}55%,86%{opacity:1;transform:none}91%,100%{opacity:0}}
 /* 演出ひかえめ:暗転と文字だけ */
 #legend.calm .cross,#legend.calm .crack,#legend.calm .lgRays{display:none}
-#legend.calm .chars b{animation:lgChar 3.3s steps(1,end) both;filter:none}
-#legend.calm .chars b:nth-child(2){animation:lgChar2 3.3s steps(1,end) both}
-#legend.calm .lgName{animation:lgName 3.3s steps(1,end) both}
+#legend.calm .chars b{animation:lgChar var(--lgD,3.3s) steps(1,end) both;filter:none}
+#legend.calm .chars b:nth-child(2){animation:lgChar2 var(--lgD,3.3s) steps(1,end) both}
+#legend.calm .lgName{animation:lgName var(--lgD,3.3s) steps(1,end) both}
 @media (prefers-reduced-motion:reduce){
   body.crt-off #gl,body.crt-off #fx,body.crt-off .hud,body.crt-off #frame,body.crt-on #gl,body.crt-on #fx,body.crt-on .hud,body.crt-on #frame{animation:none}
   #legend .lgRays{animation:lgRays 3.3s linear both}
   #legend .chars b,#legend .lgName{animation-iteration-count:1!important}
 }
+
+/* 演出の確認用パネル(?demo=puchun) */
+#demo{position:fixed;left:50%;top:36%;transform:translateX(-50%);z-index:20;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px 12px;max-width:calc(100vw - 20px);border-radius:12px;background:rgba(10,10,20,.88);border:2px solid #ffd60a;box-shadow:0 0 24px rgba(255,214,10,.35)}
+#demo button{font:inherit;font-weight:900;font-size:14px;padding:8px 12px;white-space:nowrap;border-radius:9px;border:2px solid transparent;background:linear-gradient(90deg,#ff2d3d,#ffd60a);color:#111;cursor:pointer}
+#demo button[data-k=owner]{background:linear-gradient(90deg,#e8b23a,#fff1c2)}
+#demo button[aria-pressed=true]{border-color:#fff;box-shadow:0 0 14px #fff}
+#demo small{flex-basis:100%;color:#ddd;text-align:center;font-size:12px}
+body.legend-bg #demo,body.is-run #demo{visibility:hidden}

@@ -71,7 +71,7 @@ function condOK(c, h, sky, sk){
   if (c === 'oshi') return !!(sk && sk.oshi && sk.oshi.includes(h.id));
   return false;
 }
-function buildRace(seed){
+function buildRace(seed, force){
   const r = rng32(seed), rT = rng32((seed ^ 0x9e3779b9) >>> 0);
   const idx = NAMES.map((_, i) => i);
   for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
@@ -133,7 +133,17 @@ function buildRace(seed){
   const fav = hs.slice().sort((a, b) => (b.p - a.p) || (a.no - b.no));
   ['◎','○','▲','△'].forEach((m, i) => { fav[i].mark = m; });
   fav.forEach((h, i) => { h.pop = i + 1; });
-  const legend = hs.find(h => h.skill && h.skill.grade === 4);   // 伝説が出た馬は必ず1着
+  let legend = hs.find(h => h.skill && h.skill.grade === 4);   // 伝説が出た馬は必ず1着
+  // 全ツッパの伝説率アップに当たった馬(進行役が決めて全員に配る)。オッズはもう決まっているので変わらない
+  if (force && DATA && hs[force - 1]) {
+    const h = hs[force - 1], J = DATA.jockeys[h.jki], sk = J && J.ability;
+    if (sk) {
+      const m4 = 1 + (sk.m - 1) * GRADES[4].ef;
+      h.w = (h.skill ? h.w / h.skill.mult : h.w) * m4;
+      h.skill = {name:sk.name, timing:sk.timing, jockey:J.name, jki:h.jki, grade:4, mult:m4, forced:true};
+      legend = h;
+    }
+  }
   for (const h of hs) if (h !== legend && h.skill && h.skill.grade === 4) {   // 伝説は1レースに1頭まで。2頭目は金に下げる
     const sk = DATA.jockeys[h.jki].ability, m2 = 1 + (sk.m - 1) * GRADES[3].ef;
     h.w = h.w / h.skill.mult * m2; h.skill.grade = 3; h.skill.mult = m2;
@@ -163,7 +173,7 @@ function buildRace(seed){
   const midLast = hs.slice().sort((a, b) => prog(a, tMid) - prog(b, tMid))[0].no;
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
   const tWin = hs[order[0] - 1].T, a = tWin - SL_PRE, slowDisp = (SL_PRE + SL_POST) / SL_RATE;
-  return {seed, hs, order, margin, gold, sky, notes, midLast, legend:legend ? legend.no : 0, photo:gap1 < 0.05, tWin, a, slowDisp,
+  return {seed, hs, order, margin, gold, sky, notes, midLast, legend:legend ? legend.no : 0, forced:legend && legend.skill.forced ? legend.no : 0, photo:gap1 < 0.05, tWin, a, slowDisp,
     tSettle:a + SL_PRE / SL_RATE,                         // 画面上で1着がゴールする時刻
     dur:T + 0.3 + slowDisp - (SL_PRE + SL_POST)};         // 画面上のレース時間
 }
@@ -211,13 +221,15 @@ function adopt(d){
   if (d.cur && okInt(d.cur.n, 1, 1e9) && okInt(d.cur.seed, 0, 4294967295)) S.cur = {n:d.cur.n, seed:d.cur.seed};
   const pd = d.pend;
   if (pd && okInt(pd.n, 1, 1e9) && okInt(pd.s, 0, 4294967295) && okInt(pd.h, 1, 6) && okInt(pd.bet, 1, 1e12) && Number.isFinite(pd.odds) && Number.isFinite(pd.mult))
-    S.pend = {n:pd.n, s:pd.s, h:pd.h, bet:pd.bet, odds:clamp(pd.odds, 1, 100), mult:clamp(pd.mult, 1, 10), quick:!!pd.quick, all:!!pd.all};
+    S.pend = {n:pd.n, s:pd.s, h:pd.h, bet:pd.bet, odds:clamp(pd.odds, 1, 100), mult:clamp(pd.mult, 1, 10), quick:!!pd.quick, all:!!pd.all, lg:okInt(pd.lg, 0, 6) ? pd.lg : 0};
   if (d.tb && typeof d.tb.d === 'string' && Number.isFinite(d.tb.v)) S.tb = {d:d.tb.d.slice(0, 10), v:clamp(Math.floor(d.tb.v), 0, 1e12)};
   if (Number.isFinite(d.streak)) S.streak = Math.max(0, Math.floor(d.streak));
   if (Number.isFinite(d.best)) S.best = Math.max(S.coins, Math.floor(d.best));
   if (Number.isFinite(d.busts)) S.busts = Math.max(0, Math.floor(d.busts));
 }
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+// 演出の確認用モード(?demo=puchun)。ひとりで遊び、記録は保存しない
+const DEMO = /[?&]demo=puchun/.test(window.location.search) ? {legend:false, owner:false} : null;
+function save(){ if (DEMO) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 const streakMult = s => s >= 2 ? 1.5 : s === 1 ? 1.2 : 1;
 const xpNeed = l => 60 * l * (l + 1) / 2;                 // レベル l+1 になるのに必要な累計
 function lvOf(xp){ let l = 1; while (l < 99 && xp >= xpNeed(l)) l++; return l; }
@@ -236,14 +248,14 @@ let net = null, roomCode = 'lobby', netOpts = null;
 const others = new Map(), linkPid = new Map(), seenPeers = new Set(), emoSeen = new Map(), winSeen = new Map();
 
 const isInt = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
-const vG = g => (g && typeof g === 'object' && isInt(g.n, 1, 1e9) && isInt(g.seed, 0, 4294967295) && (g.ph === 'bet' || g.ph === 'run') && Number.isFinite(g.hs)) ? {n:g.n, seed:g.seed, ph:g.ph, hs:g.hs} : null;
-const vPick = p => (p && typeof p === 'object' && isInt(p.n, 1, 1e9) && isInt(p.s, 0, 4294967295) && isInt(p.h, 1, 6) && isInt(p.bet, 1, 1e12)) ? {n:p.n, s:p.s, h:p.h, bet:p.bet} : null;
+const vG = g => (g && typeof g === 'object' && isInt(g.n, 1, 1e9) && isInt(g.seed, 0, 4294967295) && (g.ph === 'bet' || g.ph === 'run') && Number.isFinite(g.hs)) ? {n:g.n, seed:g.seed, ph:g.ph, hs:g.hs, lg:isInt(g.lg, 1, 6) ? g.lg : 0} : null;
+const vPick = p => (p && typeof p === 'object' && isInt(p.n, 1, 1e9) && isInt(p.s, 0, 4294967295) && isInt(p.h, 1, 6) && isInt(p.bet, 1, 1e12)) ? {n:p.n, s:p.s, h:p.h, bet:p.bet, lg:isInt(p.lg, 0, 50) ? p.lg : 0} : null;
 const vEmo = e => (e && typeof e === 'object' && isInt(e.k, 0, STAMPS.length - 1) && Number.isFinite(e.t)) ? {k:e.k, t:e.t} : null;
 const vWin = w => (w && typeof w === 'object' && Number.isFinite(w.t) && isInt(w.pay, 1, 1e12) && isInt(w.tier, 1, 4)) ? {t:w.t, pay:w.pay, tier:w.tier} : null;
 const newSeed = () => (Math.random() * 4294967296) >>> 0;
 
 function myState(){
-  return {pid:PID, fk:5, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
+  return {pid:PID, fk:6, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
@@ -256,12 +268,12 @@ function players(now){
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
     const s = o.st;
-    if (!s || s.fk !== 5) continue;
+    if (!s || s.fk !== 6) continue;
     out.push({peer:pid, isMe:false, nick:clean(s.nick) || 'ななし',
       hue:Number.isFinite(s.hue) ? ((Math.floor(s.hue) % 360) + 360) % 360 : 0,
       coins:Number.isFinite(s.coins) ? clamp(Math.floor(s.coins), 0, 1e12) : 0,
       streak:isInt(s.streak, 0, 1e6) ? s.streak : 0, lv:isInt(s.lv, 1, 99) ? s.lv : 1, tb:isInt(s.tb, 0, 1e12) ? s.tb : 0,
-      pz:isInt(s.pz, 0, 5000) ? s.pz : 0, pn:isInt(s.pn, 0, 1e9) ? s.pn : 0,
+      pz:isInt(s.pz, 0, 9000) ? s.pz : 0, pn:isInt(s.pn, 0, 1e9) ? s.pn : 0,
       pick:vPick(s.pick), sit:!!s.sit, away:!!s.away, g:vG(s.g), emo:vEmo(s.emo), win:vWin(s.win)});
   }
   return out;
@@ -316,7 +328,10 @@ function drive(ps, now){
     const minWait = visible.length > 1 ? 1500 : 0;
     // 全員が賭けたら即発走。そうでなければ最初の1人から GRACE_MS 後に締め切る
     if (picked.length && ((allIn && el >= minWait) || now - hostFirstPick >= GRACE_MS)) {
-      me.g = {n:g.n, seed:g.seed, ph:'run', hs:g.hs}; hostPhaseAt = now; dirty = true;
+      // 全ツッパの人ごとに伝説率アップの抽選。当たった馬が伝説になる(何人も当たったらどれか1頭)
+      const hits = picked.filter(p => p.pick.lg > 0 && Math.random() < p.pick.lg / 1000).map(p => p.pick.h);
+      const lg = hits.length ? hits[Math.floor(Math.random() * hits.length)] : 0;
+      me.g = {n:g.n, seed:g.seed, ph:'run', hs:g.hs, lg}; hostPhaseAt = now; dirty = true;
     }
   } else {
     const dur = (V.race && V.seed === g.seed ? V.race.dur : 6.5) * 1000;
@@ -331,10 +346,10 @@ function observe(g, now){
   lastG = g;
   if (g.n !== V.n || g.seed !== V.seed) {
     if (V.ph === 'run' && !V.settled) settle(true);
-    V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed);
+    V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed, g.ph === 'run' ? g.lg : 0);
     V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
     V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0; V.quick = false; V.payAnim = null;
-    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false; V.skillShown = new Set(); V.skillOn = {}; V.omenShown = false; V.pauseStart = 0; V.pauseUntil = 0; V.pauseTotal = 0; V.pauseLen = 0; V.legendOn = false;
+    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false; V.skillShown = new Set(); V.skillOn = {}; V.omenShown = false; V.pauseStart = 0; V.pauseUntil = 0; V.pauseTotal = 0; V.pauseLen = 0; V.legendOn = false; V.hold = 0;
     if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.05);
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
@@ -342,7 +357,10 @@ function observe(g, now){
     renderRound();
     audioMode(0);
   }
-  if (g.ph === 'run' && V.ph === 'bet') startRace(now);
+  if (g.ph === 'run' && V.ph === 'bet') {
+    if (g.lg && V.race.forced !== g.lg) V.race = buildRace(g.seed, g.lg);
+    startRace(now);
+  }
 }
 function startRace(now){
   V.ph = 'run'; V.raceStart = now;
@@ -355,8 +373,8 @@ function startRace(now){
       // コンボ:満タンで迎えたレースは払戻×1.3。続けて賭けるとたまり、見送るとゼロに戻る
       if (S.combo >= 5) { cm = 1.3; S.combo = 0; V.comboHit = true; } else S.combo++;
       S.boost = 1;
-      V.locked = {h:me.pick.h, bet, odds:R.hs[me.pick.h - 1].odds, mult:Math.round(sm * qm * gm * cm * bm * 100) / 100, quick:V.quick, all:bet >= S.coins, deadline:V.deadline};
-      S.coins -= bet;
+      V.locked = {h:me.pick.h, bet, odds:R.hs[me.pick.h - 1].odds, mult:Math.round(sm * qm * gm * cm * bm * 100) / 100, quick:V.quick, all:bet >= S.coins, deadline:V.deadline, lg:me.pick.lg || 0};
+      S.coins -= bet; addSpent(bet);
       if (V.quick) inc('quick');
       addXp(10);
       if (S.combo === 5) { inc('combos'); setTimeout(() => { callout('COMBO MAX! 次は×1.3', 'lead'); sLevel(); buzz([20, 20, 20, 20, 60]); checkAch({type:'combo'}); }, 900); }
@@ -372,9 +390,10 @@ function startRace(now){
     me.missed++; S.combo = 0; sessRun = 0;
     if (me.missed >= 2 && !me.sit) me.sit = true;
   }
-  S.pend = V.locked ? {n:V.n, s:V.seed, h:V.locked.h, bet:V.locked.bet, odds:V.locked.odds, mult:V.locked.mult, quick:V.locked.quick, all:V.locked.all} : null;
+  S.pend = V.locked ? {n:V.n, s:V.seed, h:V.locked.h, bet:V.locked.bet, odds:V.locked.odds, mult:V.locked.mult, quick:V.locked.quick, all:V.locked.all, lg:R.forced} : null;
   S.cur = {n:V.n + 1, seed:newSeed()};
   save();
+  if (DEMO) { DEMO.legend = false; demoSync(); }
   dirty = true;
   castSay('スタートしました!', true);
   kick3D(1);
@@ -423,7 +442,16 @@ function settle(forced){
       if (h.rank === 2) { inc('seconds'); addXp(5); }
       S.jp = Math.min(1e9, S.jp + Math.ceil(L.bet * 0.2));
       res = {type:'lose', bet:L.bet, rank:h.rank, h:L.h};
-      if (S.coins <= 0) { S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1; }
+      if (S.coins <= 0) {
+        S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1;
+        if (!forced && (Math.random() < 0.01 || (DEMO && DEMO.owner))) {
+          if (DEMO) { DEMO.owner = false; demoSync(); }
+          const gift = Math.max(10000, Math.ceil(L.bet * 2 / 1000) * 1000);
+          res.rescue = {gift, horse:h.name, owner:DATA ? DATA.horses[h.id].owner : '謎の馬主'};
+          S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
+          V.hold = 8500;   // 進行役は演出が終わるまで次のレースを待つ(終わったら実際にかかった分に縮める)
+        }
+      }
       else if (!forced && Math.random() < 0.4) res.lucky = rollLucky(L.bet);
     }
     res.cross = [1e4, 1e5, 1e6, 1e7, 1e8].filter(x => before < x && S.coins >= x).pop() || 0;
@@ -447,7 +475,7 @@ function roomInfo(win){
 }
 function tick(){
   const now = performance.now();
-  netOpen();
+  if (!DEMO) netOpen();
   const ps = players(now);
   lastPs = ps;
   const host = elect(ps);
@@ -560,6 +588,7 @@ function claimMission(i){
   return prize;
 }
 function loginBonus(){
+  if (DEMO) return;
   const d = today();
   if (S.login.last === d) return;
   S.login.streak = S.login.last === yesterday() ? S.login.streak + 1 : 1;
@@ -590,6 +619,16 @@ function rollLucky(bet){
 }
 
 /* ================= 操作 ================= */
+// このセッションで賭けた合計。全ツッパのときだけ、これに応じて伝説率が上がる(プチュンが出たら0に戻る)
+let sessSpent = 0;
+try { sessSpent = Math.max(0, Number(sessionStorage.getItem('fastkeiba.spent')) || 0); } catch (e) {}
+function addSpent(x){ sessSpent = x ? sessSpent + x : 0; try { sessionStorage.setItem('fastkeiba.spent', String(sessSpent)); } catch (e) {} }
+function allinP(bet){
+  if (S.bet !== 'all' || !(bet > 0)) return 0;
+  return Math.min(0.05, 0.01 + 0.01 * Math.log10(1 + (sessSpent + bet) / 1000));
+}
+const LEGEND_BASE = 1 / 180;   // ふつうに賭けて自分の馬が伝説になる確率(だいたい)
+const legendX = p => Math.round((p + LEGEND_BASE) / LEGEND_BASE);
 function stakeNow(){ return S.bet === 'all' ? S.coins : Math.min(S.bet, S.coins); }
 function myHorseNo(){
   if (V.locked) return V.locked.h;
@@ -601,7 +640,7 @@ function pick(no){
   const bet = stakeNow();
   if (bet <= 0) return;
   const first = !me.pick;
-  me.pick = {n:V.n, s:V.seed, h:no, bet};
+  me.pick = {n:V.n, s:V.seed, h:no, bet, lg:DEMO && DEMO.legend ? 1000 : DEMO && DEMO.owner ? 0 : Math.round(allinP(bet) * 1000)};
   me.sit = false; me.missed = 0;
   if (first) V.quick = performance.now() - V.betStart <= QUICK_MS;
   const multi = lastPs.filter(p => !p.away).length > 1;
@@ -622,7 +661,7 @@ function pick(no){
 function setBet(b){
   audioUnlock();
   S.bet = b; save();
-  if (me.pick && V.ph === 'bet') { me.pick = {n:me.pick.n, s:me.pick.s, h:me.pick.h, bet:Math.max(1, stakeNow())}; pushPresence(); }
+  if (me.pick && V.ph === 'bet') { me.pick = {n:me.pick.n, s:me.pick.s, h:me.pick.h, bet:Math.max(1, stakeNow()), lg:DEMO && DEMO.legend ? 1000 : Math.round(allinP(stakeNow()) * 1000)}; pushPresence(); }
   if (b === 'all') { sAllIn(); buzz([20, 20, 20]); } else sClick();
   tick();
 }
@@ -1408,19 +1447,19 @@ function startOmen(now){
   }, OMEN_MS);
 }
 // そのレースで止めている(止めた)時間。進行役が待ち時間に足す
-function pauseFor(n){ return n && n === V.n ? Math.round(V.pauseTotal + (V.pauseUntil ? V.pauseLen : 0)) : 0; }
-// 伝説:プチュン!と画面が十字に消えて完全に暗転し、「伝」「説」が叩きつけられてから勝ちきる
-const LEGEND_MS = 3300;
-function startLegend(h, now){
-  const sk = h.skill, quiet = calm();
-  V.legendOn = true; V.omenShown = true;
-  V.pauseStart = now; V.pauseUntil = now + LEGEND_MS; V.pauseLen = LEGEND_MS; dirty = true;
-  $('skillin').className = ''; $('omen').className = '';
-  setText($('lgWho'), sk.jockey + '(' + h.no + '番 ' + h.name + ')');
-  setText($('lgName'), '「' + sk.name + '」');
-  $('lgFace').style.setProperty('--h', String((sk.jki * 37 + 12) % 360));
+function pauseFor(n){ return n && n === V.n ? Math.round(V.pauseTotal + (V.pauseUntil ? V.pauseLen : 0) + (V.hold || 0)) : 0; }
+const LEGEND_MS = 3300, RESCUE_MS = 4600;
+// プチュン!と画面が十字に消えて完全に暗転し、2文字が叩きつけられてから光で戻ってくる。伝説と馬主の救済で共用
+function blackout(o){
+  const quiet = calm(), D = o.ms, k = D / LEGEND_MS;
+  setText($('lgWho'), o.who);
+  setText($('lgName'), o.name);
+  $('lgFace').style.setProperty('--h', String(o.hue));
+  const cs = document.querySelectorAll('#legend .chars b');
+  setText(cs[0], o.c[0]); setText(cs[1], o.c[1]);
   const el = $('legend');
-  el.className = ''; void el.offsetWidth; el.className = 'go' + (quiet ? ' calm' : '');
+  el.style.setProperty('--lgD', (D / 1000) + 's');
+  el.className = ''; void el.offsetWidth; el.className = 'go' + (o.cls ? ' ' + o.cls : '') + (quiet ? ' calm' : '');
   const B = document.body.classList;
   B.add('legend-bg', quiet ? 'crt-fade' : 'crt-off');
   if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0, A.ctx.currentTime, 0.01);
@@ -1430,16 +1469,47 @@ function startLegend(h, now){
   at(380, () => { B.add('crt-hide'); B.remove('crt-off', 'crt-fade'); });
   at(700, () => sHeart()); at(1100, () => sHeart());
   at(900, () => { if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 3200, t, 0.5, 0.08, 5200); hiss(A.sfx, t, 0.4, 0.15, 'highpass', 6000, 2); } });
-  at(1300, () => { sHit(0); buzz(60); });
-  at(1560, () => { sHit(1); buzz(80); });
-  at(1850, () => { sLegendChord(); buzz([100, 50, 100, 50, 200]); speak(sk.jockey + 'の、' + sk.name + '!', true); });
-  at(2800, () => {
+  at(1300 * k, () => { sHit(0); buzz(60); });
+  at(1560 * k, () => { sHit(1); buzz(80); });
+  at(1850 * k, () => { sLegendChord(); buzz([100, 50, 100, 50, 200]); if (o.speak) speak(o.speak, true); });
+  at(2800 * k, () => {
     B.remove('crt-hide'); B.add(quiet ? 'crt-fadein' : 'crt-on');
     if (!quiet) { flash('rainbow'); rays = 1; raysRb = true; for (let i = 0; i < 10; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.35, Math.random() * 360, 80), 150 + i * 120); }
     if (A.ctx && S.bgm) { const t = A.ctx.currentTime; A.music.gain.setTargetAtTime(0.55, t, 0.02); hiss(A.music, t, 1.6, 0.4, 'highpass', 3500, 0.5); }
-    sHorn(); castSay(h.no + '番 ' + h.name + '、伝説の末脚!', true);
+    sHorn();
+    if (o.reveal) o.reveal();
   });
-  at(3300, () => { B.remove('legend-bg', 'crt-on', 'crt-fadein'); el.className = ''; });
+  at(D, () => { B.remove('legend-bg', 'crt-on', 'crt-fadein'); el.className = ''; if (o.end) o.end(); });
+}
+function startLegend(h, now){
+  const sk = h.skill;
+  V.legendOn = true; V.omenShown = true;
+  V.pauseStart = now; V.pauseUntil = now + LEGEND_MS; V.pauseLen = LEGEND_MS; dirty = true;
+  $('skillin').className = ''; $('omen').className = '';
+  addSpent(0);
+  blackout({ms:LEGEND_MS, c:['伝', '説'], who:sk.jockey + '(' + h.no + '番 ' + h.name + ')', name:'「' + sk.name + '」', hue:(sk.jki * 37 + 12) % 360,
+    speak:sk.jockey + 'の、' + sk.name + '!', reveal:() => castSay(h.no + '番 ' + h.name + '、伝説の末脚!', true)});
+}
+// 破産したとき1%で、賭けていた馬の馬主が現れてコインをくれる
+const RESCUE_LINE = 'こんなところでへこたれてはだめだ';
+function startRescue(res){
+  const r = res.rescue;
+  document.body.classList.remove('lost');
+  blackout({ms:RESCUE_MS, cls:'owner', c:['馬', '主'], who:r.owner + ' オーナー(' + r.horse + 'の馬主)', name:'「' + RESCUE_LINE + '」', hue:48,
+    speak:RESCUE_LINE, reveal:() => {
+      const a = $('popA'), b = $('popB'), c = $('popC');
+      a.textContent = '馬主の援助!!'; c.textContent = r.owner + 'より';
+      b.textContent = '+0'; V.payAnim = {from:0, to:r.gift, t0:performance.now(), dur:1400, last:-1};
+      elPop.className = 'pop show t4' + (unlocked(7) ? ' rb' : '');
+      coinRain(110); confetti(160); coinFly(36); sWin(4);
+      toast(r.owner + 'から ' + fmt(r.gift) + 'コイン', 'gold');
+      castSay(r.horse + 'の馬主、' + r.owner + 'が現れた!', true);
+      buzz([60, 40, 60, 40, 200]);
+    }, end:() => {
+      // 演出が終わってから1.8秒は結果を見せる。それ以上は待たせない
+      if (V.race && V.hold) V.hold = Math.round(clamp(performance.now() + 1800 - V.raceStart - V.race.dur * 1000 - 2700, 0, 8500));
+      dirty = true;
+    }});
 }
 // 一時停止を差し引いたレース経過時間(秒)
 function raceTime(now){
@@ -1616,7 +1686,8 @@ function celebrate(res){
   } else if (res.bust) {
     cls += ' lose bust'; a.textContent = '破産!'; b.textContent = 'おこづかい +1,000'; c.textContent = '';
     flash(''); document.body.classList.add('lost'); sBust(); buzz(200);
-    setTimeout(() => jockeySay(res.h, 'lose', 2600), 700);
+    if (res.rescue) setTimeout(() => startRescue(res), 900);
+    else setTimeout(() => jockeySay(res.h, 'lose', 2600), 700);
   } else {
     cls += ' lose'; a.textContent = 'ハズレ'; b.textContent = '−' + fmt(res.bet);
     c.textContent = res.rank === 2 ? '惜しい!' + R.margin + 'の2着' : '';
@@ -1696,6 +1767,8 @@ function ui(ps, now){
     else if (any) { text = '急げ!締切まで' + Math.ceil(left / 1000) + '秒'; fuse = left / GRACE_MS; }
     else text = '馬をタップで投票。全員そろうか、最初の1人から5秒で発走';
     if (R.gold) text = 'ゴールデンレース(払戻×2)。' + text;
+    const ap = allinP(stakeNow());
+    if (ap > 0) text = '全ツッパ中:伝説率×' + legendX(ap) + '。' + text;
   }
   setText($('callText'), text);
   $('call').classList.toggle('gold', !!R.gold);
@@ -1707,7 +1780,7 @@ function ui(ps, now){
 
   const n = ps.length, netEl = $('net');
   netEl.classList.toggle('on', n > 1);
-  setText(netEl, !net ? '接続の準備中' : n > 1 ? n + '人が同じレースに参加中' : (roomCode === 'lobby' ? 'みんなの部屋' : '部屋「' + roomCode + '」') + 'で待機中。URLを送ると合流できます');
+  setText(netEl, DEMO ? '演出の確認用モード(ひとりで再生中)' : !net ? '接続の準備中' : n > 1 ? n + '人が同じレースに参加中' : (roomCode === 'lobby' ? 'みんなの部屋' : '部屋「' + roomCode + '」') + 'で待機中。URLを送ると合流できます');
   if (net && net.diag) {
     const d = net.diag();
     setText($('diag'), '合図の中継 Nostr ' + d.nostr.open + '/' + d.nostr.total + '・MQTT ' + d.mqtt.open + '/' + d.mqtt.total + ' 直結 ' + (d.links.nostr + d.links.mqtt) + '本' + (d.errors.length ? ' / ' + d.errors.slice(-3).join(' ') : ''));
@@ -1793,7 +1866,7 @@ function liveHud(now, racing, t, tau){
     if (r === 1 && !done) { if (!V.leadSince) V.leadSince = now; } else V.leadSince = 0;
     A.lead = r === 1 && !done && !V.settled;
     setText(rk, done ? h.rank + '着' : r === 1 ? '先頭!!' : r + '番手'); rk.classList.toggle('first', r === 1);
-    if (V.locked) setText(si, myH + '番に' + fmt(V.locked.bet) + (V.locked.all ? '(全ツッパ)' : '') + ' 当たれば +' + fmt(Math.floor(V.locked.bet * V.locked.odds * V.locked.mult)) + (V.locked.mult > 1 ? '(ボーナス×' + V.locked.mult + ')' : ''));
+    if (V.locked) setText(si, myH + '番に' + fmt(V.locked.bet) + (V.locked.all ? '(全ツッパ' + (V.locked.lg ? ' 伝説率×' + legendX(V.locked.lg / 1000) : '') + ')' : '') + ' 当たれば +' + fmt(Math.floor(V.locked.bet * V.locked.odds * V.locked.mult)) + (V.locked.mult > 1 ? '(ボーナス×' + V.locked.mult + ')' : ''));
   } else { setText(rk, ''); setText(si, '見学中'); }
 }
 
@@ -1862,7 +1935,7 @@ function renderStats(){
   const rows = [['出走', fmt(st.races || 0) + 'レース'], ['的中', fmt(st.wins || 0) + '回(' + (st.races ? ((st.wins || 0) / st.races * 100).toFixed(1) : '0.0') + '%)'],
     ['最高払戻', fmt(st.bestPay || 0) + 'コイン'], ['払戻の合計', fmt(st.totalPay || 0) + 'コイン'], ['最高所持', fmt(S.best) + 'コイン'],
     ['最長連勝', (st.maxStreak || 0) + '連勝'], ['最長連敗', (st.maxLose || 0) + '連敗'], ['破産', S.busts + '回'], ['ジャックポット', (st.jackpots || 0) + '回'],
-    ['確定演出', (st.omens || 0) + '回'], ['推し馬', th && DATA && DATA.horses[th[0]] ? DATA.horses[th[0]].name + '(' + th[1] + '勝)' : '-'], ['相棒の騎手', tj ? tj[0] + '(' + tj[1] + '勝)' : '-'],
+    ['確定演出', (st.omens || 0) + '回'], ['馬主の援助', (st.rescues || 0) + '回'], ['推し馬', th && DATA && DATA.horses[th[0]] ? DATA.horses[th[0]].name + '(' + th[1] + '勝)' : '-'], ['相棒の騎手', tj ? tj[0] + '(' + tj[1] + '勝)' : '-'],
     ['ヤジ', fmt(st.stamps || 0) + '回']];
   $('p-rec').innerHTML = '<p class="lead">Lv.' + lv + ' ' + esc(titleOf(lv)) + '</p><dl class="kvs">' + rows.map(r => '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>' +
     '<h3>レベルで解放</h3><ul class="unl">' + ACHD.unlocks.map(u => '<li class="' + (lv >= u.lv ? 'on' : '') + '"><span>Lv.' + u.lv + '</span>' + esc(u.name) + (lv >= u.lv ? '<b>解放済み</b>' : '') + '</li>').join('') + '</ul>' +
@@ -1885,7 +1958,7 @@ let pendMsg = '';
 function resolvePending(){
   const P = S.pend;
   if (!P) return;
-  V.n = P.n; V.seed = P.s; V.race = buildRace(P.s); V.ph = 'run';
+  V.n = P.n; V.seed = P.s; V.race = buildRace(P.s, P.lg || 0); V.ph = 'run';
   V.locked = {h:P.h, bet:P.bet, odds:P.odds, mult:P.mult, quick:P.quick, all:P.all, deadline:false};
   V.omen = false; V.comboHit = false;
   settle(true);
@@ -2046,5 +2119,34 @@ function start(){
 }
 // 動作確認用(?debug=1 のときだけ)。コインは元々自己申告なので、これで困ることはない
 if (/[?&]debug=1/.test(window.location.search)) window.__fk = {get G(){ return G; }, V, me, S, checkAch, showLucky, celebrate, rollLucky, openModal, setRecTab};
+// 演出の確認用パネル。実際のレースの中で、発動タイミングも含めてプチュンを見られる
+function demoSync(){
+  const box = $('demo'); if (!box) return;
+  box.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(!!DEMO[b.dataset.k])));
+  setText(box.querySelector('small'), DEMO.legend ? '好きな馬をタップ → その馬が伝説になって勝ちます' : DEMO.owner ? '最下位の馬に全ツッパしました。負けたら馬主が来ます' : '確認用モード:記録は保存されません');
+}
+function demoPanel(){
+  const box = document.createElement('div'); box.id = 'demo';
+  const mk = (k, label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = label; b.addEventListener('click', () => { audioUnlock(); fn(); demoSync(); tick(); }); box.appendChild(b); };
+  const ready = () => { if (V.ph === 'bet' && !V.late) return true; toast('レースの合間(馬を選べるとき)に押してね', ''); return false; };
+  mk('legend', '▶ 伝説を出す', () => {
+    if (!ready()) return;
+    DEMO.legend = true; DEMO.owner = false;
+    if (S.coins < 1000) S.coins = 1000;
+    S.bet = 'all';
+    if (me.pick) me.pick = null;
+  });
+  mk('owner', '▶ 馬主を呼ぶ', () => {
+    if (!ready()) return;
+    DEMO.owner = true; DEMO.legend = false;
+    S.coins = 1000; S.bet = 'all';
+    const R = V.race, last = R.order[R.order.length - 1];
+    pick(last);
+  });
+  const note = document.createElement('small'); box.appendChild(note);
+  document.body.appendChild(box);
+  demoSync();
+}
 start();
+if (/[?&]demo=puchun/.test(window.location.search)) demoPanel();
 })();
