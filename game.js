@@ -267,8 +267,10 @@ const vEmo = e => (e && typeof e === 'object' && isInt(e.k, 0, STAMPS.length - 1
 const vWin = w => (w && typeof w === 'object' && Number.isFinite(w.t) && isInt(w.pay, 1, 1e12) && isInt(w.tier, 1, 4)) ? {t:w.t, pay:w.pay, tier:w.tier} : null;
 const newSeed = () => (Math.random() * 4294967296) >>> 0;
 
+// 画面に出す所持コイン。馬主の援助は、演出で手が差し伸べられるまで表示に足さない
+const coinView = () => V.coinShow != null ? V.coinShow : S.coins;
 function myState(){
-  return {pid:PID, fk:6, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
+  return {pid:PID, fk:6, nick:S.nick, hue:S.hue, coins:coinView(), streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
@@ -276,7 +278,7 @@ function pushPresence(){
   if (net) { try { net.send(myState()); } catch (e) {} }
 }
 function players(now){
-  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
+  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:coinView(), streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win}];
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
@@ -362,7 +364,7 @@ function observe(g, now){
     V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed, g.ph === 'run' ? g.lg : 0);
     V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
     V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0; V.quick = false; V.payAnim = null;
-    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false; V.skillShown = new Set(); V.skillOn = {}; V.omenShown = false; V.pauseStart = 0; V.pauseUntil = 0; V.pauseTotal = 0; V.pauseLen = 0; V.legendOn = false; V.hold = 0;
+    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false; V.skillShown = new Set(); V.skillOn = {}; V.omenShown = false; V.pauseStart = 0; V.pauseUntil = 0; V.pauseTotal = 0; V.pauseLen = 0; V.legendOn = false; V.hold = 0; V.coinShow = null;
     if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.05);
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
@@ -467,7 +469,7 @@ function settle(forced){
           if (DEMO) { DEMO.owner = false; demoSync(); }
           const gift = Math.max(1500000, Math.ceil(L.bet * 0.5 / 1000) * 1000);   // 最低150万。大きく賭けていたら賭け金の半分
           res.rescue = {gift, horse:h.name, owner:DATA ? DATA.horses[h.id].owner : '謎の馬主'};
-          S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
+          V.coinShow = S.coins; S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
           V.hold = 8500;   // 進行役は演出が終わるまで次のレースを待つ(終わったら実際にかかった分に縮める)
         }
       }
@@ -476,8 +478,9 @@ function settle(forced){
     res.cross = [1e4, 1e5, 1e6, 1e7, 1e8].filter(x => before < x && S.coins >= x).pop() || 0;
     S.best = Math.max(S.best, S.coins);
     S.pend = null;
-    missionProgress(ev);
-    checkAch(ev);
+    // 馬主の援助のときは、実績やミッションの通知も手が差し伸べられてから(先に出ると演出がばれる)
+    if (res.rescue) res.rescue.ev = ev;
+    else { missionProgress(ev); checkAch(ev); }
     save();
   }
   V.res = res;
@@ -1563,6 +1566,8 @@ function startRescue(res){
       const a = $('popA'), b = $('popB'), c = $('popC');
       a.textContent = '馬主の援助!!'; c.textContent = r.owner + 'より';
       b.textContent = '+0'; V.payAnim = {from:0, to:r.gift, t0:performance.now(), dur:1400, last:-1};
+      V.coinShow = null; dirty = true;
+      if (r.ev) setTimeout(() => { missionProgress(r.ev); checkAch(r.ev); save(); }, 1200);
       elPop.className = 'pop show t4' + (unlocked(7) ? ' rb' : '');
       coinRain(110); confetti(160); coinFly(36); sWin(4);
       toast(r.owner + 'から ' + fmt(r.gift) + 'コイン', 'gold');
@@ -2070,7 +2075,8 @@ function frame(){
   audioFrame(racing && !V.settled && !paused, racing && V.slow && !V.settled && !paused, u);
   const bq = Math.round(beat * 5);
   if (bq !== beatShown) { beatShown = bq; document.documentElement.style.setProperty('--beat', (bq / 5).toFixed(1)); }
-  if (Math.abs(S.coins - shownCoins) > 0.5) shownCoins += (S.coins - shownCoins) * 0.14; else shownCoins = S.coins;
+  const coinTo = coinView();
+  if (Math.abs(coinTo - shownCoins) > 0.5) shownCoins += (coinTo - shownCoins) * 0.14; else shownCoins = coinTo;
   setText(elCoins, fmt(shownCoins));
   requestAnimationFrame(frame);
 }
