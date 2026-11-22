@@ -4,16 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ファスト競馬</title>
-<meta name="description" content="5秒で決着する3D競馬ゲーム。URLを送るだけで友だちと同じレースに賭けられます。コインはゲーム内ポイントのみ。">
+<meta name="description" content="5秒で決着する架空の3D競馬ゲーム(ジョークサイト)。URLを送るだけで友だちと同じレースに賭けられます。コインはゲーム内ポイントのみ。">
 <meta name="theme-color" content="#0a0e24">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body class="is-bet">
 <canvas id="gl" aria-hidden="true"></canvas>
-<div id="burst" aria-hidden="true"></div>
 <div class="bar top" aria-hidden="true"></div>
 <div class="bar bottom" aria-hidden="true"></div>
 <div id="vig" aria-hidden="true"></div>
@@ -24,7 +23,7 @@
 <div class="hud">
   <div class="tags" id="tags" aria-hidden="true"></div>
 
-  <header class="top">
+  <header class="top" id="top">
     <div class="brand">
       <h1 class="logo">ファスト競馬</h1>
       <span class="tag">ドパガキ専用・5秒決着</span>
@@ -33,20 +32,28 @@
       <div class="lv"><span id="lvText">Lv.1 ドパ見習い</span><i class="xp"><i id="xpBar"></i></i></div>
       <span class="raceNo" id="raceNo">第1R</span>
       <span class="fever" id="fever" hidden></span>
+      <div class="jp" title="ハズレの一部が積み立てられ、万馬券級の的中で全部もらえます"><span>ジャックポット</span><b id="jpVal">5,000</b></div>
       <div class="wallet" id="wallet"><span>所持コイン</span><b id="coins">1,000</b></div>
     </div>
     <div class="tools">
       <button type="button" id="btnRoom" aria-pressed="false" aria-controls="room">友だちを呼ぶ</button>
+      <button type="button" id="btnRec" aria-haspopup="dialog">実績<i class="dot" id="recDot" hidden></i></button>
+      <button type="button" id="btnMenu" aria-expanded="false" aria-controls="menu">メニュー</button>
+    </div>
+    <div class="menu" id="menu" hidden>
       <button type="button" id="btnBgm" aria-pressed="true">BGM</button>
       <button type="button" id="btnSfx" aria-pressed="true">効果音</button>
       <button type="button" id="btnFx" aria-pressed="true">演出全開</button>
-      <a class="toolLink" href="db.html">馬と騎手</a>
+      <button type="button" id="btnTts" aria-pressed="false">実況の読み上げ</button>
+      <a href="db.html">馬と騎手のデータ</a>
+      <button type="button" id="btnAbout">このサイトについて</button>
     </div>
   </header>
 
   <div class="map" id="map" aria-hidden="true"><i class="goal"></i></div>
   <div class="caster" id="caster" aria-live="polite"></div>
   <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="replayTag" aria-hidden="true">REPLAY</div>
 
   <div id="cutin" aria-hidden="true"><span class="no" id="cutNo"></span><b id="cutName"></b><i id="cutSay"></i></div>
 
@@ -56,11 +63,18 @@
     <div class="stakeInfo" id="stakeInfo"></div>
   </div>
 
+  <div id="say" aria-live="polite"><i class="face" id="sayFace"></i><div><b id="sayWho"></b><span id="sayText"></span></div></div>
+
   <div class="dan" id="dan" aria-hidden="true"></div>
 
   <div class="pop" id="pop" aria-live="polite">
     <b id="popA"></b><i id="popB"></i><em id="popC"></em>
     <div class="board" id="board" hidden></div>
+    <div class="lucky" id="lucky" hidden>
+      <p>救済くじチャンス!</p>
+      <div class="reels"><span></span><span></span><span></span></div>
+      <p class="res" id="luckyRes"></p>
+    </div>
   </div>
 
   <section class="sheet" id="sheet" aria-label="投票">
@@ -74,14 +88,16 @@
       <button class="chip" type="button" data-bet="100" aria-pressed="true">100</button>
       <button class="chip" type="button" data-bet="500" aria-pressed="false">500</button>
       <button class="chip" type="button" data-bet="all" aria-pressed="false">全ツッパ</button>
+      <span class="combo" id="combo" title="続けて賭けるとたまります。満タンの次のレースは払戻×1.3"><em>COMBO</em><i></i><i></i><i></i><i></i><i></i></span>
     </div>
     <div class="bashira" id="bashira" role="group" aria-label="出走馬。タップで単勝に賭ける"></div>
-    <p class="foot">単勝のみ。コインはゲーム内だけのポイントで、お金は賭けられません。光の点滅が苦手なときは「演出全開」を押すと控えめになります。</p>
+    <p class="foot">架空のジョークゲームです。賭けるのはゲーム内コインだけで、お金は賭けられません。</p>
   </section>
 
   <aside class="room" id="room" aria-label="部屋">
     <div class="roomHead">
       <h2>場内</h2>
+      <button type="button" class="roomClose" id="roomClose">閉じる</button>
       <p class="net" id="net">接続の準備中</p>
       <p class="diag" id="diag"></p>
     </div>
@@ -89,24 +105,49 @@
       <input id="nick" type="text" maxlength="10" autocomplete="off" spellcheck="false">
     </label>
     <ol class="players" id="players"></ol>
+    <p class="todayBest" id="todayBest"></p>
     <div class="invite">
       <button type="button" id="btnCopy">招待リンクをコピー</button>
       <button type="button" id="btnNew">専用の部屋を作る</button>
       <input id="inviteUrl" type="text" readonly aria-label="招待リンク" hidden>
     </div>
     <div class="stamps" id="stamps" role="group" aria-label="ヤジを飛ばす"></div>
-    <dl class="stats">
-      <div><dt>連勝</dt><dd id="stStreak">0</dd></div>
-      <div><dt>最高</dt><dd id="stBest">1,000</dd></div>
-      <div><dt>破産</dt><dd id="stBust">0回</dd></div>
-      <div><dt>実績</dt><dd id="stAch">0/13</dd></div>
-    </dl>
   </aside>
 </div>
 
+<div class="modal" id="rec" hidden>
+  <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="recTitle">
+    <header class="mhead"><h2 id="recTitle">ミッションと実績</h2><button type="button" class="mclose" data-close>閉じる</button></header>
+    <div class="tabs" role="tablist" aria-label="表示の切り替え">
+      <button type="button" role="tab" id="t-mis" aria-controls="p-mis" aria-selected="true">今日のミッション</button>
+      <button type="button" role="tab" id="t-ach" aria-controls="p-ach" aria-selected="false">実績 <span id="achCount"></span></button>
+      <button type="button" role="tab" id="t-rec" aria-controls="p-rec" aria-selected="false">戦績</button>
+    </div>
+    <div class="mbody">
+      <div class="tabp" id="p-mis" role="tabpanel" aria-labelledby="t-mis"></div>
+      <div class="tabp" id="p-ach" role="tabpanel" aria-labelledby="t-ach" hidden></div>
+      <div class="tabp" id="p-rec" role="tabpanel" aria-labelledby="t-rec" hidden></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="bonus" hidden>
+  <div class="mbox small" role="dialog" aria-modal="true" aria-labelledby="bonusTitle">
+    <header class="mhead gold"><h2 id="bonusTitle">ログインボーナス</h2></header>
+    <div class="mbody">
+      <p class="bonusDay" id="bonusDay"></p>
+      <ol class="week" id="bonusWeek"></ol>
+      <p class="bonusVal" id="bonusVal"></p>
+      <button type="button" class="bigBtn" data-close>受け取る</button>
+    </div>
+  </div>
+</div>
+
+<script src="about.js?v=1"></script>
 <script src="vendor/three.min.js"></script>
 <script src="vendor/net.js?v=2" async></script>
-<script src="data.js?v=1"></script>
-<script src="game.js?v=5"></script>
+<script src="data.js?v=2"></script>
+<script src="achievements.js?v=1"></script>
+<script src="game.js?v=6"></script>
 </body>
 </html>

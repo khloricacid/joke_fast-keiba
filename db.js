@@ -2,6 +2,7 @@
 (() => {
 'use strict';
 const D = window.FK_DATA;
+try { localStorage.setItem('fastkeiba.dbseen', '1'); } catch (e) {}   // ゲーム側の隠し実績「研究熱心」用
 const view = document.getElementById('view');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 const fmt = n => Math.round(n).toLocaleString('ja-JP');
@@ -141,7 +142,7 @@ function pageJockeys(){
   const list = D.jockeys.map((j, i) => ({j, i})).sort((a, b) => b.j.wins - a.j.wins);
   return '<h2 class="pt">騎手 <small>全' + D.jockeys.length + '人</small></h2><div class="jgrid">' + list.map(x => { const j = x.j;
     return '<a class="jc" href="#jockey-' + x.i + '">' + jockeySvg(x.i, 60) + '<div><b>' + esc(j.name) + '</b><small>' + esc(j.kana) + ' / ' + j.age + '歳 / ' + esc(j.style) + '</small><em>「' + esc(j.catch) + '」</em>' +
-      '<p><span>' + j.wins + '勝</span><span>勝率 ' + rate(j.wins, j.rides) + '</span><span>スクリーンタイム ' + esc(j.screen.split('(')[0]) + '</span></p></div></a>'; }).join('') + '</div>' +
+      '<q>' + esc(j.lines ? j.lines.win[0] : '') + '</q><p><span>' + j.wins + '勝</span><span>勝率 ' + rate(j.wins, j.rides) + '</span><span>スクリーンタイム ' + esc(j.screen.split('(')[0]) + '</span></p></div></a>'; }).join('') + '</div>' +
     '<p class="note">スクリーンタイムは1日あたりの平均です(本人申告)。</p>';
 }
 function pageJockey(id){
@@ -154,6 +155,9 @@ function pageJockey(id){
     '<div class="cols"><div class="main">' +
     '<section class="box"><h3>紹介</h3><p class="lede">' + esc(j.text) + '</p></section>' +
     '<section class="box"><h3>人となり</h3><dl class="prof wide">' + row('趣味', j.hobby) + row('特技', j.skill) + row('好きな食べ物', j.food) + row('休日の過ごし方', j.holiday) + row('スクリーンタイム', j.screen) + row('座右の銘', j.motto) + row('最近の悩み', j.worry) + '</dl></section>' +
+    (j.lines ? '<section class="box"><h3>セリフ集 <small class="more">ゲームの吹き出しで出ます</small></h3><dl class="prof wide lines">' +
+      [['pick', '賭けてもらったとき'], ['start', '発走'], ['lead', '先頭に立ったとき'], ['win', '勝ったとき'], ['second', '2着のとき'], ['lose', '負けたとき']]
+        .map(k => '<div><dt>' + k[1] + '</dt><dd>' + (j.lines[k[0]] || []).map(t => '「' + esc(t) + '」').join('<br>') + '</dd></div>').join('') + '</dl></section>' : '') +
     '<section class="box"><h3>お手馬</h3><div class="scroll"><table class="tbl"><thead><tr><th>馬名</th><th class="r">性齢</th><th class="r">脚質</th><th class="r">総合</th><th>主な勝ち鞍</th><th>立場</th></tr></thead><tbody>' +
       mains.concat(subs).map(h => '<tr><td class="nm">' + horseSvg(h, 34) + hLink(h) + '</td><td class="r">' + h.sex + h.age + '</td><td class="r"><span class="style">' + h.style + '</span></td><td class="r ' + gcls(overall(h)) + '">' + overall(h) + '</td><td>' + esc(h.wins) + '</td><td>' + (h.jk[0] === id ? '主戦' : '代打') + '</td></tr>').join('') + '</tbody></table></div></section>' +
     relNews(newsFor('jockeys', id)) +

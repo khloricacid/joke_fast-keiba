@@ -25,12 +25,10 @@ const NAMES = [
 ];
 const DATA = window.FK_DATA || null;      // 馬と騎手の設定(data.js)。無くてもレースは成立する
 const STAMPS = ['うおおお','草','は?','神','差せ!','そのまま!'];
-const TITLES = ['ドパ見習い','ショート民','倍速視聴者','タイパの鬼','スワイプ職人','通知の申し子','脳汁ソムリエ','ドパミン長者','ファスト王','ドパ神'];
-const ACH = {
-  first:'初的中', streak3:'3連勝', streak5:'5連勝', big10:'大穴ハンター(10倍以上を的中)', big30:'万馬券ハンター(30倍以上を的中)',
-  allin:'全ツッパ成功', nose:'ハナ差で的中', closer:'追込一気', bust:'はじめての破産', rich:'1万コイン到達', rich2:'10万コイン到達',
-  gold:'ゴールデンレース的中', quick:'秒で決断して的中'
-};
+const TITLES = [[1,'ドパ見習い'],[2,'ショート民'],[3,'倍速視聴者'],[5,'タイパの鬼'],[7,'スワイプ職人'],[10,'通知の申し子'],[13,'脳汁ソムリエ'],
+  [16,'深夜2時の住人'],[20,'ドパミン長者'],[25,'無限スクロール師'],[30,'ファスト王'],[40,'脳汁の泉'],[50,'ドパ神'],[60,'ドパミンそのもの'],[80,'宇宙の通知']];
+const ACHD = window.FK_ACH || {list:[], missions:[], unlocks:[], tiers:{}, cats:[]};
+const SAFE = k => typeof k === 'string' && k.length <= 24 && k !== '__proto__' && k !== 'constructor' && k !== 'prototype';
 const GRACE_MS = 5000;                  // 最初の1人が賭けてから締切までの時間
 const QUICK_MS = 2000;                  // この時間内に賭けると「秒で決断」ボーナス
 const KEY = 'fastkeiba.v2';
@@ -60,6 +58,7 @@ function buildRace(seed){
   for (const h of hs) { h.p = h.w / sum; h.odds = Math.min(99.9, Math.max(1.1, Math.round(0.94 / h.p * 10) / 10)); }
   const fav = hs.slice().sort((a, b) => (b.p - a.p) || (a.no - b.no));
   ['◎','○','▲','△'].forEach((m, i) => { fav[i].mark = m; });
+  fav.forEach((h, i) => { h.pop = i + 1; });
   const pool = hs.slice(), order = [];
   while (pool.length) {
     let tot = 0; for (const h of pool) tot += h.w;
@@ -85,13 +84,15 @@ function buildRace(seed){
     for (const h of hs) {
       let j = DATA.horses[h.id].jk.find(x => !used.has(x));
       if (j === undefined) j = DATA.jockeys.findIndex((_, x) => !used.has(x));
-      used.add(j); h.jk = DATA.jockeys[j].name.replace(' ', '');
+      used.add(j); h.jki = j; h.jkFull = DATA.jockeys[j].name; h.jk = DATA.jockeys[j].name.replace(' ', '');
     }
   }
   const gold = r() < 0.12;                 // ゴールデンレース:払戻2倍
+  const tMid = hs[order[0] - 1].T * 0.5;   // 道中(1着の半分の時点)で最後方だった馬
+  const midLast = hs.slice().sort((a, b) => prog(a, tMid) - prog(b, tMid))[0].no;
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
   const tWin = hs[order[0] - 1].T, a = tWin - SL_PRE, slowDisp = (SL_PRE + SL_POST) / SL_RATE;
-  return {seed, hs, order, margin, gold, photo:gap1 < 0.05, tWin, a, slowDisp,
+  return {seed, hs, order, margin, gold, midLast, photo:gap1 < 0.05, tWin, a, slowDisp,
     tSettle:a + SL_PRE / SL_RATE,                         // 画面上で1着がゴールする時刻
     dur:T + 0.3 + slowDisp - (SL_PRE + SL_POST)};         // 画面上のレース時間
 }
@@ -109,7 +110,8 @@ function prog(h, tau){
 }
 
 /* ================= 保存する自分の状態 ================= */
-const S = {coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, calm:false, streak:0, best:1000, busts:0, xp:0, ach:{}};
+const S = {coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
+  st:{}, daily:null, login:{last:'', streak:0}, combo:0, boost:1, jp:5000, tb:{d:'', v:0}};
 function clean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁯]/g, '').slice(0, 10); }
 function adopt(d){
   if (!d || typeof d !== 'object') return;
@@ -117,9 +119,23 @@ function adopt(d){
   if (typeof d.nick === 'string' && clean(d.nick)) S.nick = clean(d.nick);
   if (Number.isFinite(d.hue)) S.hue = ((Math.floor(d.hue) % 360) + 360) % 360;
   if (d.bet === 'all' || d.bet === 10 || d.bet === 100 || d.bet === 500) S.bet = d.bet;
-  for (const k of ['bgm', 'sfx', 'calm']) if (typeof d[k] === 'boolean') S[k] = d[k];
+  for (const k of ['bgm', 'sfx', 'calm', 'tts']) if (typeof d[k] === 'boolean') S[k] = d[k];
   if (Number.isFinite(d.xp)) S.xp = clamp(Math.floor(d.xp), 0, 1e9);
-  if (d.ach && typeof d.ach === 'object') for (const k of Object.keys(ACH)) if (d.ach[k]) S.ach[k] = true;
+  if (d.ach && typeof d.ach === 'object') for (const a of ACHD.list) if (d.ach[a.id]) S.ach[a.id] = true;
+  if (d.st && typeof d.st === 'object') for (const k of Object.keys(d.st).slice(0, 80)) {
+    if (!SAFE(k)) continue;
+    const v = d.st[k];
+    if (Number.isFinite(v)) S.st[k] = clamp(v, 0, 1e15);
+    else if (v && typeof v === 'object') { const o = {}; for (const kk of Object.keys(v).slice(0, 64)) if (SAFE(kk) && Number.isFinite(v[kk])) o[kk] = clamp(v[kk], 0, 1e9); S.st[k] = o; }
+  }
+  const dl = d.daily;
+  if (dl && typeof dl.d === 'string' && Array.isArray(dl.ids) && Array.isArray(dl.p) && Array.isArray(dl.c))
+    S.daily = {d:dl.d.slice(0, 10), ids:dl.ids.slice(0, 3).map(String), p:dl.p.slice(0, 3).map(x => clamp(Number(x) || 0, 0, 999)), c:dl.c.slice(0, 3).map(Boolean)};
+  if (d.login && typeof d.login.last === 'string' && Number.isFinite(d.login.streak)) S.login = {last:d.login.last.slice(0, 10), streak:clamp(Math.floor(d.login.streak), 0, 9999)};
+  if (Number.isInteger(d.combo)) S.combo = clamp(d.combo, 0, 5);
+  if (Number.isFinite(d.boost)) S.boost = clamp(d.boost, 1, 2);
+  if (Number.isFinite(d.jp)) S.jp = clamp(Math.floor(d.jp), 5000, 1e9);
+  if (d.tb && typeof d.tb.d === 'string' && Number.isFinite(d.tb.v)) S.tb = {d:d.tb.d.slice(0, 10), v:clamp(Math.floor(d.tb.v), 0, 1e12)};
   if (Number.isFinite(d.streak)) S.streak = Math.max(0, Math.floor(d.streak));
   if (Number.isFinite(d.best)) S.best = Math.max(S.coins, Math.floor(d.best));
   if (Number.isFinite(d.busts)) S.busts = Math.max(0, Math.floor(d.busts));
@@ -128,14 +144,16 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e)
 const streakMult = s => s >= 2 ? 1.5 : s === 1 ? 1.2 : 1;
 const xpNeed = l => 60 * l * (l + 1) / 2;                 // レベル l+1 になるのに必要な累計
 function lvOf(xp){ let l = 1; while (l < 99 && xp >= xpNeed(l)) l++; return l; }
-const titleOf = l => TITLES[Math.min(TITLES.length - 1, l - 1)];
+const titleOf = l => TITLES.filter(t => t[0] <= l).pop()[1];
+const unlocked = lv => lvOf(S.xp) >= lv;
 const calm = () => reduced || S.calm;
 
 /* ================= ゲーム進行 ================= */
 const PID = Array.from({length:12}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 const me = {pick:null, sit:false, missed:0, away:document.hidden, g:null, emo:null, win:null};
 const V = {n:0, seed:-1, ph:'idle', race:null, betStart:0, firstPick:0, raceStart:0, settled:false, settledAt:0, late:false, locked:null, res:null,
-  lead:0, slow:false, stretch:false, myRank:0, quick:false, calloutAt:0, payAnim:null};
+  lead:0, slow:false, stretch:false, myRank:0, quick:false, calloutAt:0, payAnim:null, omen:false, chance:false, deadline:false, leadSince:0, comboHit:false};
+let lastPs = [], lastRoomCheck = 0, sessRun = 0, saySeq = 0;
 let lastG = null, hostPhaseAt = 0, hostFirstPick = 0, dirty = false, lastSent = 0;
 let net = null, roomCode = 'lobby', netOpts = null;
 const others = new Map(), linkPid = new Map(), seenPeers = new Set(), emoSeen = new Map(), winSeen = new Map();
@@ -148,7 +166,7 @@ const vWin = w => (w && typeof w === 'object' && Number.isFinite(w.t) && isInt(w
 const newSeed = () => (Math.random() * 4294967296) >>> 0;
 
 function myState(){
-  return {pid:PID, fk:3, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp),
+  return {pid:PID, fk:4, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(),
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
@@ -156,16 +174,16 @@ function pushPresence(){
   if (net) { try { net.send(myState()); } catch (e) {} }
 }
 function players(now){
-  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp),
+  const out = [{peer:PID, isMe:true, nick:S.nick, hue:S.hue, coins:S.coins, streak:S.streak, lv:lvOf(S.xp), tb:todayBest(),
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win}];
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
     const s = o.st;
-    if (!s || s.fk !== 3) continue;
+    if (!s || s.fk !== 4) continue;
     out.push({peer:pid, isMe:false, nick:clean(s.nick) || 'ななし',
       hue:Number.isFinite(s.hue) ? ((Math.floor(s.hue) % 360) + 360) % 360 : 0,
       coins:Number.isFinite(s.coins) ? clamp(Math.floor(s.coins), 0, 1e12) : 0,
-      streak:isInt(s.streak, 0, 1e6) ? s.streak : 0, lv:isInt(s.lv, 1, 99) ? s.lv : 1,
+      streak:isInt(s.streak, 0, 1e6) ? s.streak : 0, lv:isInt(s.lv, 1, 99) ? s.lv : 1, tb:isInt(s.tb, 0, 1e12) ? s.tb : 0,
       pick:vPick(s.pick), sit:!!s.sit, away:!!s.away, g:vG(s.g), emo:vEmo(s.emo), win:vWin(s.win)});
   }
   return out;
@@ -232,6 +250,8 @@ function observe(g, now){
     V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed);
     V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
     V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0; V.quick = false; V.payAnim = null;
+    V.omen = false; V.chance = false; V.deadline = false; V.leadSince = 0; V.comboHit = false; A.lead = false;
+    if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.05);
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
     renderRound();
@@ -245,22 +265,34 @@ function startRace(now){
   if (me.pick) {
     const bet = Math.min(me.pick.bet, S.coins);
     if (bet > 0) {
-      const sm = streakMult(S.streak), qm = V.quick ? 1.1 : 1, gm = R.gold ? 2 : 1;
-      V.locked = {h:me.pick.h, bet, odds:R.hs[me.pick.h - 1].odds, mult:Math.round(sm * qm * gm * 100) / 100, quick:V.quick, all:bet >= S.coins};
+      const sm = streakMult(S.streak), qm = V.quick ? 1.1 : 1, gm = R.gold ? 2 : 1, bm = S.boost || 1;
+      let cm = 1;
+      // コンボ:満タンで迎えたレースは払戻×1.3。続けて賭けるとたまり、見送るとゼロに戻る
+      if (S.combo >= 5) { cm = 1.3; S.combo = 0; V.comboHit = true; } else S.combo++;
+      S.boost = 1;
+      V.locked = {h:me.pick.h, bet, odds:R.hs[me.pick.h - 1].odds, mult:Math.round(sm * qm * gm * cm * bm * 100) / 100, quick:V.quick, all:bet >= S.coins, deadline:V.deadline};
       S.coins -= bet;
+      if (V.quick) inc('quick');
       addXp(10);
+      if (S.combo === 5) { inc('combos'); setTimeout(() => { callout('COMBO MAX! 次は×1.3', 'lead'); sLevel(); buzz([20, 20, 20, 20, 60]); checkAch({type:'combo'}); }, 900); }
+      // 確定演出は当たるレースでだけ出る。「チャンス!」は外れでもときどき出る
+      const win = R.order[0] === me.pick.h, big = R.hs[me.pick.h - 1].odds >= 10;
+      V.omen = win && Math.random() < (big ? 0.45 : 0.2);
+      V.chance = !V.omen && Math.random() < (win ? 0.3 : 0.08);
+      sessRun++; S.st.playRun = Math.max(S.st.playRun || 0, sessRun);
     }
     me.missed = 0;
   } else {
-    me.missed++;
+    me.missed++; S.combo = 0; sessRun = 0;
     if (me.missed >= 2 && !me.sit) me.sit = true;
   }
+  save();
   dirty = true;
-  setText($('caster'), 'スタートしました!');
+  castSay('スタートしました!', true);
   kick3D(1);
   flash('');
   ring(0.5, 0.5, '#ffffff');
-  if (V.locked) cutIn(V.locked);
+  if (V.locked) { cutIn(V.locked); setTimeout(() => jockeySay(V.locked && V.locked.h, 'start', 1600), 900); }
   sGate(); sWhoosh();
   buzz([30, 30, 70]);
   audioMode(1);
@@ -270,33 +302,46 @@ function settle(forced){
   const R = V.race, win = R.order[0];
   let res = null;
   if (V.locked) {
-    const L = V.locked, h = R.hs[L.h - 1];
-    if (L.h === win) {
+    const L = V.locked, h = R.hs[L.h - 1], st = S.st, before = S.coins + L.bet, room = roomInfo(win);
+    const hr = new Date().getHours();
+    const ev = {type:'settle', win:L.h === win, odds:L.odds, bet:L.bet, all:L.all, quick:L.quick, deadline:L.deadline, horse:h.name, jockey:h.jkFull || '',
+      style:h.style, gate:L.h, pop:h.pop, rank:h.rank, photo:R.photo, gold:R.gold, fromLast:R.midLast === win, night:hr >= 2 && hr < 4, calm:calm(),
+      roomN:room.n, roomWinners:room.winners, roomSame:room.same, pay:0, tier:0, bust:false, streak:0};
+    inc('races');
+    if (ev.win) {
       const pay = Math.floor(L.bet * L.odds * L.mult), m = pay / L.bet;
       const tier = m >= 30 ? 4 : m >= 10 ? 3 : m >= 5 ? 2 : 1;
       S.coins = Math.min(1e12, S.coins + pay); S.streak++;
-      res = {type:'win', pay, odds:L.odds, mult:L.mult, tier};
-      me.win = {t:Date.now(), pay, tier};
+      ev.pay = pay; ev.tier = tier; ev.streak = S.streak;
+      res = {type:'win', pay, odds:L.odds, mult:L.mult, tier, combo:V.comboHit, h:L.h};
+      inc('wins'); inc('totalPay', pay); st.bestPay = Math.max(st.bestPay || 0, pay); st.maxStreak = Math.max(st.maxStreak || 0, S.streak); st.loseStreak = 0;
+      incMap('gates', String(L.h)); incMap('styles', h.style); incMap('byHorse', String(h.id)); if (h.jkFull) incMap('byJockey', h.jkFull);
+      st.favStreak = h.pop === 1 ? (st.favStreak || 0) + 1 : 0;
+      st.allinStreak = L.all ? (st.allinStreak || 0) + 1 : 0;
+      if (L.bet <= 10) inc('tinyWins');
+      if (R.photo) inc('photoWins');
+      if (R.gold) inc('goldWins');
+      if (V.omen) inc('omens');
       addXp(20 + Math.min(120, Math.round(L.odds * 6)));
-      unlock('first');
-      if (S.streak >= 3) unlock('streak3');
-      if (S.streak >= 5) unlock('streak5');
-      if (L.odds >= 10) unlock('big10');
-      if (L.odds >= 30) unlock('big30');
-      if (L.all && L.bet >= 500) unlock('allin');
-      if (R.photo) unlock('nose');
-      if (h.style === '追込') unlock('closer');
-      if (R.gold) unlock('gold');
-      if (L.quick) unlock('quick');
-      if (S.coins >= 10000) unlock('rich');
-      if (S.coins >= 100000) unlock('rich2');
+      // ジャックポット:万馬券級(払戻30倍以上)で必ず、それ以外の的中でもまれに
+      if (tier >= 4 || Math.random() < 1 / 150) { res.jp = S.jp; S.coins = Math.min(1e12, S.coins + S.jp); inc('jackpots'); S.jp = 5000; }
+      const t = today();
+      if (S.tb.d !== t) S.tb = {d:t, v:0};
+      S.tb.v = Math.max(S.tb.v, pay + (res.jp || 0));
+      me.win = {t:Date.now(), pay:pay + (res.jp || 0), tier};
+      if (st.bustFlag && S.coins >= 10000) { inc('comebacks'); st.bustFlag = 0; }
     } else {
-      S.streak = 0;
-      res = {type:'lose', bet:L.bet, rank:h.rank};
-      if (h.rank === 2) addXp(5);
-      if (S.coins <= 0) { S.coins = 1000; S.busts++; res.bust = true; unlock('bust'); }
+      S.streak = 0; st.loseStreak = (st.loseStreak || 0) + 1; st.maxLose = Math.max(st.maxLose || 0, st.loseStreak); st.favStreak = 0; st.allinStreak = 0;
+      if (h.rank === 2) { inc('seconds'); addXp(5); }
+      S.jp = Math.min(1e9, S.jp + Math.ceil(L.bet * 0.2));
+      res = {type:'lose', bet:L.bet, rank:h.rank, h:L.h};
+      if (S.coins <= 0) { S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1; }
+      else if (!forced && Math.random() < 0.4) res.lucky = rollLucky(L.bet);
     }
+    res.cross = [1e4, 1e5, 1e6, 1e7, 1e8].filter(x => before < x && S.coins >= x).pop() || 0;
     S.best = Math.max(S.best, S.coins);
+    missionProgress(ev);
+    checkAch(ev);
     save();
   }
   V.res = res;
@@ -304,10 +349,18 @@ function settle(forced){
   if (!forced) celebrate(res);
   pushPresence();
 }
+// レース確定時の部屋のようす(実績の判定用)
+function roomInfo(win){
+  const here = lastPs.filter(p => !p.away);
+  const picks = here.filter(p => p.pick && p.pick.n === V.n && p.pick.s === V.seed);
+  return {n:here.length, winners:picks.filter(p => p.pick.h === win).length,
+    same:picks.length >= 2 && picks.length === here.length && picks.every(p => p.pick.h === picks[0].pick.h)};
+}
 function tick(){
   const now = performance.now();
   netOpen();
   const ps = players(now);
+  lastPs = ps;
   const host = elect(ps);
   if (host && host.isMe) drive(ps, now);
   else if (me.g) { me.g = null; dirty = true; }
@@ -327,10 +380,20 @@ function tick(){
     emoSeen.set(p.peer, t); winSeen.set(p.peer, w);
   }
   if (dirty || now - lastSent > 1800) pushPresence();
+  if (ps.length >= 2 && now - lastRoomCheck > 2000) {
+    lastRoomCheck = now;
+    checkAch({type:'room', n:ps.filter(p => !p.away).length, top:ps.every(p => p.isMe || p.coins < S.coins)});
+  }
   ui(ps, now);
 }
 
-/* ================= 経験値・称号・実績 ================= */
+/* ================= 経験値・称号・実績・ミッション ================= */
+const inc = (k, v) => { S.st[k] = (S.st[k] || 0) + (v === undefined ? 1 : v); };
+const incMap = (k, kk) => { if (!SAFE(kk)) return; const o = S.st[k] && typeof S.st[k] === 'object' ? S.st[k] : (S.st[k] = {}); o[kk] = (o[kk] || 0) + 1; };
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const today = () => ymd(new Date());
+const yesterday = () => ymd(new Date(Date.now() - 86400000));
+const todayBest = () => S.tb && S.tb.d === today() ? S.tb.v : 0;
 function addXp(n){
   const before = lvOf(S.xp);
   S.xp += n;
@@ -339,14 +402,102 @@ function addXp(n){
     const bonus = after * 200;
     S.coins = Math.min(1e12, S.coins + bonus);
     toast('レベルアップ! Lv.' + after + ' ' + titleOf(after) + ' +' + fmt(bonus) + 'コイン', 'level');
-    setTimeout(() => { sLevel(); if (!calm()) { firework(0.5, 0.25, 50, 90); starBurst(0.5, 0.12, 20, 50); } }, 900);
+    for (const u of ACHD.unlocks) if (u.lv > before && u.lv <= after) setTimeout(() => toast('解放:' + u.name, 'level'), 1200);
+    setTimeout(() => { sLevel(); buzz([30, 30, 30, 30, 120]); if (!calm()) { firework(0.5, 0.25, 50, 90); starBurst(0.5, 0.12, 20, 50); } }, 900);
+    checkAch({type:'level'});
   }
   save();
 }
-function unlock(id){
-  if (S.ach[id]) return;
-  S.ach[id] = true; save();
-  setTimeout(() => toast('実績解除:' + ACH[id], 'ach'), 1400);
+// 実績の判定。新しく取れたものは少しずつ間をあけて知らせる
+const achQueue = [];
+let achTimer = 0;
+function checkAch(ev){
+  const c = {st:S.st, S, ev:ev || {type:'none'}, lv:lvOf(S.xp)};
+  let got = false;
+  for (const a of ACHD.list) {
+    if (S.ach[a.id]) continue;
+    let ok = false;
+    try { ok = !!a.test(c); } catch (e) { ok = false; }
+    if (ok) { S.ach[a.id] = true; achQueue.push(a); got = true; }
+  }
+  if (got) { save(); if (!achTimer) achTimer = setTimeout(flushAch, 1500); }
+}
+function flushAch(){
+  achTimer = 0;
+  const a = achQueue.shift();
+  if (!a) return;
+  const tier = a.hidden ? '隠し' : ACHD.tiers[a.tier] || '';
+  toast('実績解除【' + tier + '】' + a.name, a.tier === 'g' || a.hidden ? 'gold' : 'ach');
+  if ((a.tier === 'g' || a.hidden) && !calm()) { starBurst(0.2, 0.25, 18, 50); sLevel(); }
+  if (achQueue.length) achTimer = setTimeout(flushAch, 1000);
+}
+function ensureDaily(){
+  const d = today();
+  if (S.daily && S.daily.d === d && S.daily.ids.length === 3) return;
+  const r = rng32(Number(d.replace(/-/g, '')) * 2654435761);
+  const pool = ACHD.missions.slice(), ids = [];
+  while (ids.length < 3 && pool.length) ids.push(pool.splice(Math.floor(r() * pool.length), 1)[0].id);
+  S.daily = {d, ids, p:[0, 0, 0], c:[false, false, false]};
+  save();
+}
+function missionProgress(ev){
+  ensureDaily();
+  S.daily.ids.forEach((id, i) => {
+    const m = ACHD.missions.find(x => x.id === id);
+    if (!m || S.daily.p[i] >= m.goal) return;
+    let add = 0;
+    try { add = m.on(ev) || 0; } catch (e) { add = 0; }
+    if (!add) return;
+    S.daily.p[i] = Math.min(m.goal, S.daily.p[i] + add);
+    if (S.daily.p[i] >= m.goal) setTimeout(() => { toast('ミッション達成:' + m.text + '。「実績」から宝箱を開けよう', 'gold'); sLevel(); }, 1900);
+  });
+}
+function missionReady(){
+  if (!S.daily) return false;
+  return S.daily.ids.some((id, i) => { const m = ACHD.missions.find(x => x.id === id); return m && S.daily.p[i] >= m.goal && !S.daily.c[i]; });
+}
+function claimMission(i){
+  ensureDaily();
+  const m = ACHD.missions.find(x => x.id === S.daily.ids[i]);
+  if (!m || S.daily.p[i] < m.goal || S.daily.c[i]) return null;
+  S.daily.c[i] = true;
+  const x = Math.random();
+  const prize = x < 0.05 ? {v:5000, label:'超大当たり'} : x < 0.3 ? {v:1500, label:'大当たり'} : {v:500, label:'当たり'};
+  S.coins = Math.min(1e12, S.coins + prize.v);
+  inc('dailyDone');
+  addXp(50);
+  checkAch({type:'daily'});
+  save();
+  return prize;
+}
+function loginBonus(){
+  const d = today();
+  if (S.login.last === d) return;
+  S.login.streak = S.login.last === yesterday() ? S.login.streak + 1 : 1;
+  S.login.last = d;
+  S.st.loginBest = Math.max(S.st.loginBest || 0, S.login.streak);
+  const day = S.login.streak, bonus = 200 * Math.min(day, 7) + (day % 7 === 0 ? 2000 : 0);
+  S.coins = Math.min(1e12, S.coins + bonus);
+  save();
+  setText($('bonusDay'), day + '日連続ログイン');
+  $('bonusWeek').replaceChildren(...Array.from({length:7}, (_, k) => {
+    const li = document.createElement('li'), cyc = ((day - 1) % 7) + 1;
+    li.textContent = (k + 1) + '日目'; const b = document.createElement('b'); b.textContent = '+' + fmt(200 * (k + 1) + (k === 6 ? 2000 : 0)); li.appendChild(b);
+    if (k + 1 < cyc) li.className = 'done'; else if (k + 1 === cyc) li.className = 'now';
+    return li;
+  }));
+  setText($('bonusVal'), '+' + fmt(bonus) + 'コイン');
+  openModal('bonus', () => { coinFly(18); sLevel(); checkAch({type:'boot'}); });
+}
+// 救済くじ:ハズレのあと、ときどき引ける
+function rollLucky(bet){
+  const x = Math.random();
+  if (x < 0.02) return {sym:['7', '7', '7'], kind:'big', v:bet * 3, text:'大当たり! 賭け金の3倍 +' + fmt(bet * 3)};
+  if (x < 0.08) return {sym:['◎', '◎', '◎'], kind:'boost', text:'次のレースの払戻×1.5'};
+  if (x < 0.2) return {sym:['♪', '♪', '♪'], kind:'xp', text:'経験値 +40'};
+  if (x < 0.45) { const v = Math.max(1, Math.round(bet * 0.2)); return {sym:['★', '★', '★'], kind:'coin', v, text:'賭け金の2割が戻る +' + fmt(v)}; }
+  const near = Math.random() < 0.5;
+  return {sym:near ? ['7', '7', '×'] : ['★', '◎', '♪'], kind:'miss', text:near ? 'リーチ…! おしい' : 'スカ'};
 }
 
 /* ================= 操作 ================= */
@@ -364,6 +515,9 @@ function pick(no){
   me.pick = {n:V.n, s:V.seed, h:no, bet};
   me.sit = false; me.missed = 0;
   if (first) V.quick = performance.now() - V.betStart <= QUICK_MS;
+  const multi = lastPs.filter(p => !p.away).length > 1;
+  V.deadline = multi && V.firstPick > 0 && GRACE_MS - (performance.now() - V.firstPick) < 1000;
+  jockeySay(no, 'pick', 1700);
   const el = umaEls[no - 1];
   if (el) {
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -389,13 +543,14 @@ function stamp(k){
   me.emo = e;
   shout(STAMPS[k], S.hue);
   sClick();
+  inc('stamps'); missionProgress({type:'stamp'}); checkAch({type:'stamp'}); save();
   pushPresence();
   setTimeout(() => { if (me.emo === e) { me.emo = null; pushPresence(); } }, 3000);
 }
 function buzz(p){ if (calm()) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
 
 /* ================= 音(BGMも効果音もその場で合成) ================= */
-const A = {ctx:null, master:null, music:null, mfilt:null, sfx:null, crowd:null, noise:null, step:0, nextT:0, mode:0, gallopAt:0, heartAt:0, beats:[], fever:false};
+const A = {ctx:null, master:null, music:null, mfilt:null, sfx:null, crowd:null, noise:null, step:0, nextT:0, mode:0, gallopAt:0, heartAt:0, beats:[], fever:false, lead:false};
 const BPM = 168;
 const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];           // Am F C G
 const MEL = [
@@ -462,7 +617,7 @@ function sequencer(){
   }
 }
 function musicStep(i, t){
-  const bar = Math.floor(i / 16) % 4, s = i % 16, ch = CH[bar], hi = A.mode === 1, m = A.music, tr = A.fever ? 2 : 0, ST = stepLen();
+  const bar = Math.floor(i / 16) % 4, s = i % 16, ch = CH[bar], hi = A.mode === 1, m = A.music, tr = (A.fever ? 2 : 0) + (A.lead ? 2 : 0), ST = stepLen();
   if (hi ? s % 4 === 0 : (s === 0 || s === 10)) tone(m, 'sine', 150, t, 0.16, hi ? 0.95 : 0.6, 42);            // キック
   if (hi && (s === 4 || s === 12)) { hiss(m, t, 0.13, 0.42, 'bandpass', 1900, 0.8); tone(m, 'triangle', 190, t, 0.08, 0.25, 120); }   // スネア
   if (hi || s % 2 === 0) hiss(m, t, s % 4 === 2 ? 0.07 : 0.03, (s % 4 === 2 ? 0.2 : 0.11) * (hi ? 1 : 0.7), 'highpass', 7500, 0.7);       // ハット
@@ -509,6 +664,23 @@ function sWin(tier){
   A.crowd.gain.setValueAtTime(0.2 + tier * 0.07, t);
   A.crowd.gain.setTargetAtTime(0.012, t + 0.5 + tier * 0.3, 0.7);
 }
+function sOmen(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 300, t, 0.7, 0.14, 2600); tone(A.sfx, 'square', 600, t, 0.7, 0.06, 5200); [84, 88, 91, 96].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.7 + i * 0.05, 0.18, 0.09)); } }
+function sChance(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', mtof(79), t, 0.08, 0.1); tone(A.sfx, 'square', mtof(86), t + 0.09, 0.14, 0.1); } }
+function sReel(){ if (sfxOK()) tone(A.sfx, 'square', 1200 + Math.random() * 400, A.ctx.currentTime, 0.025, 0.04); }
+function sTreasure(){ if (sfxOK()) { const t = A.ctx.currentTime; hiss(A.sfx, t, 0.4, 0.25, 'bandpass', 600, 1, 3000); [72, 79, 84, 88, 91].forEach((n, i) => tone(A.sfx, 'triangle', mtof(n), t + 0.3 + i * 0.06, 0.2, 0.12)); } }
+// 実況の読み上げ(ブラウザの音声合成。メニューでオンにしたときだけ)
+function speak(text, force){
+  if (!S.tts || !text || !('speechSynthesis' in window)) return;
+  try {
+    const ss = window.speechSynthesis;
+    if (ss.speaking && !force) return;
+    ss.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP'; u.rate = 1.7; u.pitch = 1.1; u.volume = 0.9;
+    ss.speak(u);
+  } catch (e) {}
+}
+function castSay(text, force){ setText($('caster'), text); if (text) speak(text, force); }
 function sLose(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 220, t, 0.3, 0.12, 110); A.crowd.gain.setTargetAtTime(0.012, t, 0.3); } }
 function sBust(){ if (sfxOK()) { const t = A.ctx.currentTime; [0, 0.16, 0.32].forEach((d, i) => tone(A.sfx, 'sawtooth', 196 / (1 + i * 0.25), t + d, 0.28, 0.14)); } }
 function audioFrame(racing, slow, u){
@@ -574,14 +746,16 @@ function init3D(){
   if (!T) return null;
   const canvas = $('gl');
   const renderer = new T.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  // スマホは画素数を少し抑える(発熱と描画落ちの対策)
+  renderer.setPixelRatio(Math.min(window.matchMedia('(pointer:coarse)').matches ? 1.5 : 2, window.devicePixelRatio || 1));
   const scene = new T.Scene();
   // 空は4種類:ナイター、夕焼け、オーロラ、ゴールデンレース
   const skies = [
     {tex:skyTex([[0, '#040618'], [0.38, '#0d1238'], [0.5, '#3a1d5c'], [0.56, '#c2415a'], [0.6, '#1a1438'], [1, '#0a0e24']]), fog:0x1a1438, hemi:0xaab4ff},
     {tex:skyTex([[0, '#1b1040'], [0.3, '#7a2a6a'], [0.48, '#ff6a3c'], [0.56, '#ffc24a'], [0.6, '#3a1a38'], [1, '#1a0e24']]), fog:0x4a2040, hemi:0xffc8a0},
     {tex:skyTex([[0, '#02121c'], [0.25, '#0b4a52'], [0.42, '#1fd6a0'], [0.5, '#5a3ad6'], [0.58, '#0d2a3a'], [1, '#06101c']]), fog:0x0f2f3a, hemi:0x9affd8},
-    {tex:skyTex([[0, '#2a1a02'], [0.3, '#8a5a08'], [0.48, '#ffd60a'], [0.56, '#fff3a0'], [0.6, '#4a3008'], [1, '#1a1204']]), fog:0x5a4410, hemi:0xfff0b0}
+    {tex:skyTex([[0, '#2a1a02'], [0.3, '#8a5a08'], [0.48, '#ffd60a'], [0.56, '#fff3a0'], [0.6, '#4a3008'], [1, '#1a1204']]), fog:0x5a4410, hemi:0xfff0b0},
+    {tex:skyTex([[0, '#3a0a5a'], [0.14, '#ff2d3d'], [0.26, '#ff9a1a'], [0.36, '#ffe14a'], [0.44, '#3dff8a'], [0.52, '#2de2ff'], [0.6, '#5a3aff'], [1, '#14082a']]), fog:0x5a2a7a, hemi:0xffe0ff}
   ];
   scene.fog = new T.Fog(skies[0].fog, 60, 430);
   scene.background = skies[0].tex;
@@ -804,11 +978,12 @@ function drawVision(racing, tau){
   });
   vi.tex.needsUpdate = true;
 }
-function update3D(now, dt, racing, t, tau){
+function update3D(now, dt, racing, t, tau, replay){
   if (!G || !V.race) return;
   const R = V.race, cam = G.camera, myH = myHorseNo();
   const live = racing && !V.settled, hot = S.streak >= 2 || R.gold, quiet = calm();
-  setSky(R.gold ? 3 : R.seed % 3);
+  const omenSky = V.omen && racing && !V.late && t >= R.a && !quiet;
+  setSky(omenSky ? 4 : (racing && V.slow && !V.settled && unlocked(30)) ? 2 : R.gold ? 3 : R.seed % 3);
   let lead = -1e9, mine = 0;
   const xs = [];
   for (const H of G.horses) {
@@ -821,14 +996,14 @@ function update3D(now, dt, racing, t, tau){
     pose(H, racing ? tau * 24 + H.no * 1.3 : 0, run, now);
     const isMine = H.no === myH;
     H.marker.visible = isMine;
-    if (isMine) { H.marker.position.y = 4.1 + Math.sin(now / 150) * 0.2; H.marker.rotation.y = now / 260; mine = H.x; }
+    if (isMine) { H.marker.position.y = 4.1 + Math.sin(now / 150) * 0.2; H.marker.rotation.y = now / 260; mine = H.x; if (unlocked(15) && !quiet) H.marker.material.color.setHSL((now / 900) % 1, 1, 0.6); else H.marker.material.color.setHex(0xffd60a); }
     // 光の尾:自分の馬は金色で長く
     const tv = racing && run > 0.55 && !quiet;
     H.trail.visible = tv;
     if (tv) {
       H.trail.scale.x = (isMine ? 9 : 5) * run * (0.85 + beat * 0.3);
       H.trail.scale.y = isMine ? 1.5 : 1;
-      H.tMat.color.setHex(isMine ? 0xffd60a : H.glow);
+      if (isMine && unlocked(3)) H.tMat.color.setHSL((now / 600) % 1, 1, 0.6); else H.tMat.color.setHex(isMine ? 0xffd60a : H.glow);
       H.tMat.opacity = isMine ? 0.8 : 0.4;
     }
     xs.push(H.x); if (H.x > lead) lead = H.x;
@@ -867,7 +1042,9 @@ function update3D(now, dt, racing, t, tau){
   const focus = myH ? pack * 0.55 + mine * 0.45 : pack;
   let id, px, py, pz, lx, ly, lz, fov, ease = 0;
   const far = cam.aspect < 1 ? 1.45 : 1;       // 縦長の画面では横からのカメラを引く
-  if (!racing) {
+  if (replay) {                                   // ゴールの瞬間をもう一度、正面寄りから
+    id = 'R'; px = TL + 6.5 * far; py = 1.5; pz = 4.5 * far; lx = TL - 3; ly = 1.45; lz = -0.5; fov = 36;
+  } else if (!racing) {
     const mz = myH ? G.horses[myH - 1].z : 0;
     id = 'I'; px = 9 + Math.sin(s * 0.25) * 2.2; py = 2.3 + Math.sin(s * 0.4) * 0.25; pz = 10.5 - Math.cos(s * 0.25) * 1.2;
     lx = 0.4; ly = 1.35; lz = mz * 0.35; fov = 44; ease = 3;
@@ -876,7 +1053,9 @@ function update3D(now, dt, racing, t, tau){
     id = 'E'; px = w.x + Math.cos(ang) * 8.5; pz = w.z - Math.sin(ang) * 8.5; py = 2 + ss * 0.2; lx = w.x; ly = 1.7; lz = w.z; fov = 38; ease = 6;
   } else {
     const u = tau / R.tWin;
-    if (u < 0.2) { id = 'A'; px = focus - 8.5; py = 2.7; pz = 2.2; lx = focus + 10; ly = 1.3; lz = 0; fov = 62; }
+    if (myH && V.leadSince && now - V.leadSince > 350 && u >= 0.22 && u < 0.78) {   // 自分の馬が先頭に立ったら専用カメラ
+      const H = G.horses[myH - 1]; id = 'M'; px = H.x + 3.8; py = 1.3; pz = H.z + 4.6 * far; lx = H.x - 0.4; ly = 1.6; lz = H.z; fov = 44;
+    } else if (u < 0.2) { id = 'A'; px = focus - 8.5; py = 2.7; pz = 2.2; lx = focus + 10; ly = 1.3; lz = 0; fov = 62; }
     else if (u < 0.5) { id = 'B'; px = focus + 5 / far; py = 3.1 * far; pz = 14 * far; lx = focus + 1.2; ly = 1.2; lz = 0; fov = 44; }
     else if (u < 0.78) { id = 'C'; px = lead + 15; py = 1.7; pz = 3.2; lx = focus; ly = 1.6; lz = -0.6; fov = 38; }
     else { const cx = Math.min(lead + 2, TL - 4), k = clamp((t - R.a) / 1.5, 0, 1); id = 'D'; px = cx; py = 3.0 * far; pz = 14.5 * far; lx = cx + 3.4; ly = 1.2; lz = 0; fov = 50 - 14 * k; }
@@ -912,7 +1091,7 @@ function update3D(now, dt, racing, t, tau){
 
 /* ================= 画面エフェクト(集中線・花火・星・紙吹雪・コイン) ================= */
 const fx = $('fx'), fctx = fx.getContext('2d');
-let parts = [], coinsFx = [], rain = [], fw = [], stars = [], rings = [], fxDirty = false, burst = 0, hueSpin = 0;
+let parts = [], coinsFx = [], rain = [], fw = [], stars = [], rings = [], fxDirty = false, burst = 0, hueSpin = 0, rays = 0, raysRb = false, raysRot = 0;
 function resizeFx(){ fx.width = window.innerWidth; fx.height = window.innerHeight; }
 function confetti(n){
   if (calm()) return;
@@ -953,10 +1132,26 @@ function drawFx(dt, racing, u){
   const lines = racing && !V.settled && !calm();
   // フィーバー中とゴールデンレースは、画面のあちこちで星がまたたく
   if (hot && !calm() && Math.random() < 0.25) stars.push({x:Math.random() * W, y:Math.random() * H * 0.8, vx:0, vy:-0.4, s:4 + Math.random() * 9, life:1, rot:Math.random() * 3, hue:R.gold ? 50 : Math.random() * 360});
-  if (!lines && !parts.length && !coinsFx.length && !rain.length && !fw.length && !stars.length && !rings.length && burst <= 0) { if (fxDirty) { fctx.clearRect(0, 0, W, H); fxDirty = false; } return; }
+  if (!lines && !parts.length && !coinsFx.length && !rain.length && !fw.length && !stars.length && !rings.length && burst <= 0 && rays <= 0) { if (fxDirty) { fctx.clearRect(0, 0, W, H); fxDirty = false; } return; }
   fxDirty = true;
   fctx.clearRect(0, 0, W, H);
   hueSpin = (hueSpin + dt * 240) % 360;
+  if (rays > 0) {                                  // 的中の後光
+    rays = Math.max(0, rays - dt / 2.9); raysRot += dt * 0.7;
+    const cx = W / 2, cy = H * 0.44, RR = Math.hypot(W, H) * 0.62, a0 = Math.min(1, (1 - rays) * 12) * Math.min(1, rays * 2.5);
+    const g = fctx.createRadialGradient(cx, cy, 0, cx, cy, RR);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    fctx.save(); fctx.globalAlpha = 0.55 * a0;
+    for (let i = 0; i < 24; i++) {
+      const a = raysRot + i * Math.PI / 12;
+      fctx.fillStyle = raysRb ? 'hsl(' + ((i * 15 + hueSpin) % 360) + ' 100% 60%)' : '#ffd60a';
+      fctx.beginPath(); fctx.moveTo(cx, cy); fctx.arc(cx, cy, RR, a, a + Math.PI / 24); fctx.closePath(); fctx.fill();
+    }
+    fctx.globalCompositeOperation = 'destination-out'; fctx.globalAlpha = 1;
+    const m = fctx.createRadialGradient(cx, cy, RR * 0.3, cx, cy, RR); m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, 'rgba(0,0,0,1)');
+    fctx.fillStyle = m; fctx.fillRect(0, 0, W, H);
+    fctx.restore();
+  }
   if (lines || burst > 0) {                       // 集中線(フィーバー中と的中時は虹色)
     const int = burst > 0 ? 1 : 0.3 + 0.7 * u * u;
     const n = Math.floor(14 + int * 50), cx = W / 2, cy = H * 0.46, RR = Math.hypot(W, H) / 2;
@@ -1071,15 +1266,52 @@ function cutIn(L){
   const el = $('cutin'), h = V.race.hs[L.h - 1], no = $('cutNo');
   no.textContent = String(L.h); no.style.background = FRAME[L.h - 1].bg; no.style.color = FRAME[L.h - 1].fg;
   $('cutName').textContent = h.name + (h.jk ? '(' + h.jk + ')' : '');
-  $('cutSay').textContent = L.all ? '全ツッパ!!' : h.odds >= 15 ? '大穴いけ!!' : '行け!!';
-  el.className = ''; void el.offsetWidth; el.className = L.all ? 'go all' : 'go';
+  $('cutSay').textContent = V.omen ? '激アツ!?' : L.all ? '全ツッパ!!' : h.odds >= 15 ? '大穴いけ!!' : '行け!!';
+  el.className = ''; void el.offsetWidth; el.className = 'go' + (L.all ? ' all' : '') + (V.omen && Math.random() < 0.5 ? ' omen' : '');
+}
+// 騎手のひとこと(画面下の吹き出し)
+let sayTimer = 0;
+function jockeySay(no, kind, ms){
+  const h = V.race && no && V.race.hs[no - 1];
+  if (!h || !DATA || h.jki === undefined) return '';
+  const j = DATA.jockeys[h.jki], lines = j.lines && j.lines[kind];
+  if (!lines || !lines.length) return '';
+  const text = lines[Math.floor(Math.random() * lines.length)];
+  setText($('sayWho'), j.name + '(' + h.no + '番 ' + h.name + ')');
+  setText($('sayText'), '「' + text + '」');
+  $('sayFace').style.setProperty('--h', String((h.jki * 37 + 12) % 360));
+  const el = $('say');
+  el.className = ''; void el.offsetWidth; el.className = 'on';
+  clearTimeout(sayTimer); sayTimer = setTimeout(() => { el.className = ''; }, ms || 2200);
+  return text;
+}
+function showLucky(lk){
+  const box = $('lucky'), reels = box.querySelectorAll('.reels span'), res = $('luckyRes'), syms = ['7', '◎', '★', '♪', '×'];
+  box.hidden = false; box.className = 'lucky'; res.textContent = '';
+  const stopAt = [450, 750, 1100], t0 = performance.now(), seq = ++saySeq;
+  const spin = () => {
+    if (seq !== saySeq || box.hidden) return;
+    const el = performance.now() - t0;
+    reels.forEach((r, i) => { r.textContent = el >= stopAt[i] ? lk.sym[i] : syms[Math.floor(Math.random() * syms.length)]; r.classList.toggle('stop', el >= stopAt[i]); });
+    if (el < stopAt[2]) { sReel(); setTimeout(spin, 60); return; }
+    res.textContent = lk.text;
+    if (lk.kind === 'miss') { box.classList.add('miss'); return; }
+    box.classList.add('hit');
+    if (lk.kind === 'big') { S.coins = Math.min(1e12, S.coins + lk.v); inc('luckyBig'); coinRain(60); sWin(2); flash('gold'); buzz([50, 30, 50, 30, 150]); checkAch({type:'lucky'}); }
+    else if (lk.kind === 'coin') { S.coins = Math.min(1e12, S.coins + lk.v); coinFly(8); sChance(); }
+    else if (lk.kind === 'boost') { S.boost = 1.5; sLevel(); toast('次のレースの払戻×1.5', 'gold'); }
+    else if (lk.kind === 'xp') { addXp(40); sChance(); }
+    if (!calm()) starBurst(0.5, 0.62, 14, 50);
+    save(); pushPresence();
+  };
+  spin();
 }
 function renderRound(){
   const R = V.race;
   elPop.className = 'pop'; $('popA').textContent = ''; $('popB').textContent = ''; $('popC').textContent = '';
-  elBoard.hidden = true; $('burst').className = '';
+  elBoard.hidden = true; rays = 0; $('lucky').hidden = true; saySeq++;
   document.body.classList.remove('lost');
-  setText($('caster'), '');
+  castSay('');
   voteSig = []; tagSig = [];
   umaEls = R.hs.map((h, i) => {
     const b = document.createElement('button');
@@ -1124,40 +1356,57 @@ function renderBoard(){
   elBoard.hidden = false;
 }
 // 払戻の倍率で演出が4段階に変わる
+const CROSS = {1e4:'1万', 1e5:'10万', 1e6:'100万', 1e7:'1,000万', 1e8:'1億'};
 function celebrate(res){
   const a = $('popA'), b = $('popB'), c = $('popC');
-  const R = V.race;
-  setText($('caster'), R.hs[R.order[0] - 1].name + ' ゴールイン!');
+  const R = V.race, wn = R.hs[R.order[0] - 1];
+  castSay(wn.name + ' ゴールイン!', true);
   sGoal(); kick3D(1);
   ring(0.5, 0.46, '#ffffff');
-  if (A.ctx) A.mfilt.frequency.setTargetAtTime(15000, A.ctx.currentTime, 0.05);
+  if (A.ctx) { const t = A.ctx.currentTime; A.mfilt.frequency.setTargetAtTime(15000, t, 0.05); if (S.bgm) { A.music.gain.setTargetAtTime(0.55, t, 0.03); hiss(A.music, t, 1.4, 0.35, 'highpass', 4000, 0.5); } }
+  A.lead = false;
   let cls = 'pop show';
   if (!res) { a.textContent = ''; b.textContent = ''; c.textContent = ''; flash(''); elPop.className = cls; return; }
   if (res.type === 'win') {
     const tr = res.tier;
     a.textContent = ['', '的中!!', '大的中!!', '大穴的中!!', '万馬券級!!!'][tr];
     b.textContent = '+0';
-    V.payAnim = {to:res.pay, t0:performance.now(), dur:500 + tr * 250, last:-1};
-    c.textContent = (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.mult > 1 ? ' ボーナス×' + res.mult : '');
-    cls += ' t' + tr;
+    V.payAnim = {from:0, to:res.pay, t0:performance.now(), dur:500 + tr * 250, last:-1};
+    c.textContent = (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.combo ? ' COMBO' : '') + (res.mult > 1 ? ' ボーナス×' + res.mult : '');
+    cls += ' t' + tr + (unlocked(7) ? ' rb' : '');
     flash(tr >= 3 ? 'rainbow' : 'gold'); shake(tr >= 3); burst = 1;
-    $('burst').className = calm() ? '' : 'on' + (tr >= 3 ? ' rainbow' : '');
+    if (!calm()) { rays = 1; raysRb = tr >= 3; }
     confetti([0, 120, 190, 300, 460][tr]);
     coinFly([0, 22, 32, 46, 64][tr]);
-    if (tr >= 2) coinRain([0, 0, 40, 90, 170][tr]);
-    const shots = [0, 3, 5, 9, 16][tr];
+    if (tr >= 2 || unlocked(20)) coinRain([0, 30, 40, 90, 170][tr]);
+    const shots = [0, 3, 5, 9, 16][tr] * (unlocked(10) ? 2 : 1);
     for (let i = 0; i < shots; i++) setTimeout(() => firework(0.12 + Math.random() * 0.76, 0.1 + Math.random() * 0.32, Math.random() * 360, 50 + tr * 14), 120 + i * (1900 / shots));
     starBurst(0.5, 0.42, 16 + tr * 8, 50);
     sWin(tr); if (tr >= 3) sHorn();
     buzz(tr >= 3 ? [60, 40, 60, 40, 200] : [40, 30, 90]);
+    setTimeout(() => { const line = jockeySay(res.h, 'win', 3200); if (line) speak(line); }, 1100);
+    if (res.jp) setTimeout(() => {
+      a.textContent = 'JACKPOT!!'; elPop.className = 'pop show t4 jp';
+      V.payAnim = {from:res.pay, to:res.pay + res.jp, t0:performance.now(), dur:1600, last:-1};
+      flash('rainbow'); shake(true); burst = 1; coinRain(220); confetti(300); sHorn(); setTimeout(sHorn, 700);
+      for (let i = 0; i < 14; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.35, Math.random() * 360, 90), i * 140);
+      buzz([100, 50, 100, 50, 100, 50, 400]); toast('ジャックポット +' + fmt(res.jp) + 'コイン', 'gold'); checkAch({type:'jackpot'});
+    }, 1700);
   } else if (res.bust) {
     cls += ' lose bust'; a.textContent = '破産!'; b.textContent = 'おこづかい +1,000'; c.textContent = '';
     flash(''); document.body.classList.add('lost'); sBust(); buzz(200);
+    setTimeout(() => jockeySay(res.h, 'lose', 2600), 700);
   } else {
     cls += ' lose'; a.textContent = 'ハズレ'; b.textContent = '−' + fmt(res.bet);
     c.textContent = res.rank === 2 ? '惜しい!' + R.margin + 'の2着' : '';
     flash(''); document.body.classList.add('lost'); sLose();
+    setTimeout(() => jockeySay(res.h, res.rank === 2 ? 'second' : 'lose', 2600), 600);
+    if (res.lucky) setTimeout(() => showLucky(res.lucky), 900);
   }
+  if (res.cross) setTimeout(() => {
+    toast('大台突破! 所持コイン' + CROSS[res.cross], 'gold'); flash('gold'); coinRain(90); sHorn(); buzz([80, 40, 80, 40, 200]);
+    if (!calm()) for (let i = 0; i < 6; i++) setTimeout(() => firework(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.25, 48, 80), i * 160);
+  }, res.jp ? 3400 : 2100);
   elPop.className = cls;
 }
 function shout(text, hue){
@@ -1220,11 +1469,12 @@ function ui(ps, now){
     if (!any) V.firstPick = 0; else if (!V.firstPick) V.firstPick = now;
     const left = any ? Math.max(0, GRACE_MS - (now - V.firstPick)) : GRACE_MS;
     const quick = !myH && now - V.betStart <= QUICK_MS;
-    if (!multi) text = quick ? '馬をタップで即発走。いまなら「秒で決断」×1.1' : A.ctx ? '馬をタップ。その瞬間に発走' : '馬をタップ。その瞬間に発走(BGMも鳴ります)';
+    if (S.boost > 1 && !myH) text = '救済くじの効果で次の的中は×' + S.boost + '。';
+    if (!multi) text = (text || '') + (quick ? '馬をタップで即発走。いまなら「秒で決断」×1.1' : A.ctx ? '馬をタップ。その瞬間に発走' : '馬をタップ。その瞬間に発走(BGMも鳴ります)');
     else if (myH) { text = '投票ずみ。全員そろうか、あと' + Math.ceil(left / 1000) + '秒で発走'; fuse = left / GRACE_MS; }
     else if (any) { text = '急げ!締切まで' + Math.ceil(left / 1000) + '秒'; fuse = left / GRACE_MS; }
     else text = '馬をタップで投票。全員そろうか、最初の1人から5秒で発走';
-    if (R.gold) text = 'ゴールデンレース 払戻×2|' + text;
+    if (R.gold) text = 'ゴールデンレース(払戻×2)。' + text;
   }
   setText($('callText'), text);
   $('call').classList.toggle('gold', !!R.gold);
@@ -1243,10 +1493,11 @@ function ui(ps, now){
   }
   setText($('btnRoom'), n > 1 ? '部屋 ' + n + '人' : '友だちを呼ぶ');
   if (n > 1 && !autoOpened) { autoOpened = true; if (window.innerWidth >= 900 && !roomOpen) $('btnRoom').click(); }
-  setText($('stStreak'), String(S.streak));
-  setText($('stBest'), fmt(S.best));
-  setText($('stBust'), S.busts + '回');
-  setText($('stAch'), Object.keys(S.ach).length + '/' + Object.keys(ACH).length);
+  setText($('jpVal'), fmt(S.jp));
+  $('combo').dataset.n = String(S.combo); $('combo').classList.toggle('max', S.combo >= 5);
+  $('recDot').hidden = !missionReady();
+  const tb = ps.filter(p => p.tb > 0).sort((a, b) => b.tb - a.tb)[0];
+  setText($('todayBest'), tb ? '本日の最高払戻:' + (tb.isMe ? 'あなた' : tb.nick) + ' +' + fmt(tb.tb) : '');
 
   const rows = ps.slice().sort((a, b) => (b.coins - a.coins) || (a.peer < b.peer ? -1 : 1));
   const sig = JSON.stringify(rows.map(p => [p.peer, p.nick, p.hue, p.coins, p.lv, p.away, p.sit, inRound(p) ? [p.pick.h, p.pick.bet] : 0, canBet]));
@@ -1277,7 +1528,7 @@ function liveHud(now, racing, t, tau){
   }
   if (V.payAnim) {
     const P = V.payAnim, k = clamp((now - P.t0) / P.dur, 0, 1), step = Math.floor(k * 14);
-    setText($('popB'), '+' + fmt(Math.floor(P.to * (1 - Math.pow(1 - k, 3)))));
+    setText($('popB'), '+' + fmt(Math.floor(P.from + (P.to - P.from) * (1 - Math.pow(1 - k, 3)))));
     if (step !== P.last) { P.last = step; sTick(k); }
     if (k >= 1) V.payAnim = null;
   }
@@ -1287,15 +1538,17 @@ function liveHud(now, racing, t, tau){
   const leadNo = sorted[0].no, u = tau / R.tWin;
   const slow = t >= R.a && t < R.a + R.slowDisp;
   if (slow && !V.slow && !V.settled) {
-    if (A.ctx) A.mfilt.frequency.setTargetAtTime(380, A.ctx.currentTime, 0.07);
+    if (A.ctx) { A.mfilt.frequency.setTargetAtTime(380, A.ctx.currentTime, 0.07); if (S.bgm) A.music.gain.setTargetAtTime(0.12, A.ctx.currentTime, 0.08); }
     sRoll(); callout('勝負所!!', 'lead');
+    if (V.omen) { setTimeout(() => { callout('激アツ!!', 'omen'); sOmen(); flash('rainbow'); buzz([120, 60, 120]); }, 150); }
+    else if (V.chance) setTimeout(() => { callout('チャンス!', 'up'); sChance(); }, 150);
   }
   V.slow = slow;
   const myH = myHorseNo();
   if (!V.settled) {
-    if (u >= 0.78 && !V.stretch) { V.stretch = true; setText($('caster'), '最後の直線!先頭は' + leadNo + '番 ' + R.hs[leadNo - 1].name); cheer(0.16); }
-    else if (leadNo !== V.lead && tau > 0.6) setText($('caster'), leadNo + '番 ' + R.hs[leadNo - 1].name + (V.lead ? ' かわして先頭!' : ' 先頭!'));
-    if (slow && R.photo) setText($('caster'), 'これは際どい!写真判定か!');
+    if (u >= 0.78 && !V.stretch) { V.stretch = true; castSay('最後の直線!先頭は' + leadNo + '番 ' + R.hs[leadNo - 1].name); cheer(0.16); }
+    else if (leadNo !== V.lead && tau > 0.6) castSay(leadNo + '番 ' + R.hs[leadNo - 1].name + (V.lead ? ' かわして先頭!' : ' 先頭!'));
+    if (slow && R.photo) castSay('これは際どい!写真判定か!');
   }
   V.lead = leadNo;
   const rk = $('rank'), si = $('stakeInfo');
@@ -1305,20 +1558,112 @@ function liveHud(now, racing, t, tau){
       if (V.myRank && !done && tau > 0.5 && now - V.calloutAt > 320) {
         V.calloutAt = now;
         if (r < V.myRank) {
-          if (r === 1) { callout('先頭だ!!', 'lead'); sLead(); flash('soft'); starBurst(0.16, 0.8, 16, 50); buzz(25); }
+          if (r === 1) { callout('先頭だ!!', 'lead'); sLead(); flash('soft'); starBurst(0.16, 0.8, 16, 50); buzz([25, 25, 60]); jockeySay(myH, 'lead', 1500); }
           else { callout('↑ かわした! ' + r + '番手', 'up'); sRank(true); }
           addXp(2);
         } else { callout('↓ 抜かれた', 'down'); sRank(false); }
       }
       V.myRank = r; rk.classList.remove('bump'); void rk.offsetWidth; rk.classList.add('bump');
     }
+    if (r === 1 && !done) { if (!V.leadSince) V.leadSince = now; } else V.leadSince = 0;
+    A.lead = r === 1 && !done && !V.settled;
     setText(rk, done ? h.rank + '着' : r === 1 ? '先頭!!' : r + '番手'); rk.classList.toggle('first', r === 1);
     if (V.locked) setText(si, myH + '番に' + fmt(V.locked.bet) + (V.locked.all ? '(全ツッパ)' : '') + ' 当たれば +' + fmt(Math.floor(V.locked.bet * V.locked.odds * V.locked.mult)) + (V.locked.mult > 1 ? '(ボーナス×' + V.locked.mult + ')' : ''));
   } else { setText(rk, ''); setText(si, '見学中'); }
 }
 
+/* ================= ダイアログ(実績・ミッション・戦績・ログインボーナス) ================= */
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
+let modalOpen = null, modalPrev = null, modalAfter = null, recTab = 'mis', achFilter = 'all';
+function openModal(id, after){
+  closeMenu();
+  if (modalOpen) closeModal();
+  const m = $(id);
+  modalPrev = document.activeElement; modalAfter = after || null;
+  m.hidden = false; modalOpen = m;
+  setTimeout(() => { const f = m.querySelector('[aria-selected="true"]') || m.querySelector('.mbox button'); if (f) f.focus(); }, 0);
+}
+function closeModal(){
+  if (!modalOpen) return;
+  modalOpen.hidden = true; modalOpen = null;
+  const after = modalAfter; modalAfter = null;
+  try { if (modalPrev && modalPrev.focus) modalPrev.focus(); } catch (e) {}
+  if (after) after();
+}
+function closeMenu(){ const m = $('menu'); if (m && !m.hidden) { m.hidden = true; $('btnMenu').setAttribute('aria-expanded', 'false'); } }
+function setRecTab(tab){
+  recTab = tab;
+  for (const k of ['mis', 'ach', 'rec']) { $('t-' + k).setAttribute('aria-selected', String(k === tab)); $('t-' + k).tabIndex = k === tab ? 0 : -1; $('p-' + k).hidden = k !== tab; }
+  if (tab === 'mis') renderMissions(); else if (tab === 'ach') renderAch(); else renderStats();
+}
+const pbar = (cur, goal) => '<span class="pbar"><i style="width:' + clamp(cur / goal * 100, 0, 100).toFixed(1) + '%"></i></span>';
+function renderMissions(){
+  ensureDaily();
+  const lv = lvOf(S.xp), next = ACHD.unlocks.find(u => u.lv > lv);
+  $('p-mis').innerHTML = '<p class="lead">毎日0時に3つ入れ替わります。宝箱の中身は開けるまでわかりません。</p><ul class="misList">' +
+    S.daily.ids.map((id, i) => {
+      const m = ACHD.missions.find(x => x.id === id) || {text:'?', goal:1}, p = S.daily.p[i], done = p >= m.goal, got = S.daily.c[i];
+      return '<li class="mis' + (got ? ' got' : done ? ' ready' : '') + '"><div><b>' + esc(m.text) + '</b>' + pbar(p, m.goal) + '<small>' + p + ' / ' + m.goal + '</small></div>' +
+        (got ? '<span class="claimed">受け取り済み</span>' : done ? '<button type="button" class="chest" data-claim="' + i + '">宝箱をあける</button>' : '<span class="chest locked" aria-label="未達成">宝箱</span>') + '</li>';
+    }).join('') + '</ul>' +
+    '<dl class="kvs"><div><dt>連続ログイン</dt><dd>' + S.login.streak + '日(最長 ' + (S.st.loginBest || 0) + '日)</dd></div>' +
+    '<div><dt>コンボ</dt><dd>' + S.combo + ' / 5' + (S.combo >= 5 ? '(次のレース×1.3)' : '') + '</dd></div>' +
+    '<div><dt>ジャックポット</dt><dd>' + fmt(S.jp) + 'コイン(払戻30倍以上の的中で獲得)</dd></div>' +
+    '<div><dt>次の解放</dt><dd>' + (next ? 'Lv.' + next.lv + ':' + esc(next.name) : 'すべて解放済み') + '</dd></div></dl>';
+}
+function renderAch(){
+  const c = {st:S.st, S, ev:{type:'none'}, lv:lvOf(S.xp)}, total = ACHD.list.length, got = ACHD.list.filter(a => S.ach[a.id]).length;
+  setText($('achCount'), got + '/' + total);
+  const tierCount = t => ACHD.list.filter(a => (a.hidden ? 'h' : a.tier) === t && S.ach[a.id]).length + '/' + ACHD.list.filter(a => (a.hidden ? 'h' : a.tier) === t).length;
+  let html = '<div class="achTop"><p><b>' + got + '</b> / ' + total + ' 取得</p>' + pbar(got, total) +
+    '<p class="tiers"><span class="m b">銅 ' + tierCount('b') + '</span><span class="m s">銀 ' + tierCount('s') + '</span><span class="m g">金 ' + tierCount('g') + '</span><span class="m h">隠し ' + tierCount('h') + '</span></p>' +
+    '<div class="seg" role="group" aria-label="絞り込み">' + [['all', 'すべて'], ['got', '取得済み'], ['lock', '未取得']].map(f => '<button type="button" data-af="' + f[0] + '" aria-pressed="' + (achFilter === f[0]) + '">' + f[1] + '</button>').join('') + '</div></div>';
+  for (const cat of ACHD.cats) {
+    const all = ACHD.list.filter(a => a.cat === cat), list = all.filter(a => achFilter === 'all' || (achFilter === 'got') === !!S.ach[a.id]);
+    if (!list.length) continue;
+    html += '<h3>' + esc(cat) + ' <small>' + all.filter(a => S.ach[a.id]).length + '/' + all.length + '</small></h3><ul class="achList">' + list.map(a => {
+      const own = !!S.ach[a.id], t = a.hidden ? 'h' : a.tier, secret = a.hidden && !own;
+      let pr = '';
+      if (!own && !secret && a.prog) { try { const v = a.prog(c); pr = pbar(v[0], v[1]) + '<small class="num">' + fmt(v[0]) + ' / ' + fmt(v[1]) + '</small>'; } catch (e) { pr = ''; } }
+      return '<li class="ach ' + (own ? 'got' : 'lock') + '"><span class="m ' + t + '">' + (ACHD.tiers[t] || '') + '</span><div><b>' + (secret ? '？？？' : esc(a.name)) + '</b><small>' + (secret ? '条件はひみつ' : esc(a.desc)) + '</small>' + pr + '</div></li>';
+    }).join('') + '</ul>';
+  }
+  $('p-ach').innerHTML = html;
+}
+function renderStats(){
+  const st = S.st, lv = lvOf(S.xp);
+  const top = o => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1])[0]; return e || null; };
+  const th = top(st.byHorse), tj = top(st.byJockey);
+  const rows = [['出走', fmt(st.races || 0) + 'レース'], ['的中', fmt(st.wins || 0) + '回(' + (st.races ? ((st.wins || 0) / st.races * 100).toFixed(1) : '0.0') + '%)'],
+    ['最高払戻', fmt(st.bestPay || 0) + 'コイン'], ['払戻の合計', fmt(st.totalPay || 0) + 'コイン'], ['最高所持', fmt(S.best) + 'コイン'],
+    ['最長連勝', (st.maxStreak || 0) + '連勝'], ['最長連敗', (st.maxLose || 0) + '連敗'], ['破産', S.busts + '回'], ['ジャックポット', (st.jackpots || 0) + '回'],
+    ['確定演出', (st.omens || 0) + '回'], ['推し馬', th && DATA && DATA.horses[th[0]] ? DATA.horses[th[0]].name + '(' + th[1] + '勝)' : '-'], ['相棒の騎手', tj ? tj[0] + '(' + tj[1] + '勝)' : '-'],
+    ['ヤジ', fmt(st.stamps || 0) + '回']];
+  $('p-rec').innerHTML = '<p class="lead">Lv.' + lv + ' ' + esc(titleOf(lv)) + '</p><dl class="kvs">' + rows.map(r => '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>' +
+    '<h3>レベルで解放</h3><ul class="unl">' + ACHD.unlocks.map(u => '<li class="' + (lv >= u.lv ? 'on' : '') + '"><span>Lv.' + u.lv + '</span>' + esc(u.name) + (lv >= u.lv ? '<b>解放済み</b>' : '') + '</li>').join('') + '</ul>' +
+    '<p class="note"><a href="db.html">馬と騎手のデータを見る</a></p>';
+}
+function openTreasure(i, btn){
+  const prize = claimMission(i);
+  if (!prize) return;
+  const box = document.createElement('div');
+  box.className = 'chestOpen' + (prize.v >= 1500 ? ' big' : '');
+  box.innerHTML = '<i aria-hidden="true"></i><b>' + esc(prize.label) + ' +' + fmt(prize.v) + '</b>';
+  btn.replaceWith(box);
+  sTreasure(); buzz([30, 30, 30, 30, 100]);
+  setTimeout(() => { coinFly(prize.v >= 1500 ? 30 : 14); if (prize.v >= 1500) { coinRain(60); sHorn(); } }, 450);
+  setTimeout(() => { if (recTab === 'mis' && modalOpen) renderMissions(); }, 2200);
+}
+
 /* ================= メインループ ================= */
 let lastFrame = performance.now(), beatShown = -1;
+// 確定のあと1.3秒だけ、ゴール前をもう一度スローで映す
+function replayTau(t){
+  const R = V.race;
+  if (!R || V.ph !== 'run' || !V.settled || V.late || calm()) return null;
+  const k = t - (R.tSettle + 0.5);
+  return k < 0 || k > 1.3 ? null : R.tWin - 0.3 + k * 0.27;
+}
 function frame(){
   const now = performance.now(), dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
@@ -1328,7 +1673,9 @@ function frame(){
   if (racing && !V.settled && t >= V.race.tSettle) settle(false);
   beatFrame(now, dt);
   liveHud(now, racing, t, tau);
-  update3D(now, dt, racing, t, tau);
+  const rp = replayTau(t);
+  document.body.classList.toggle('replay', rp !== null);
+  update3D(now, dt, racing, t, rp !== null ? rp : tau, rp !== null);
   const u = racing ? clamp(tau / V.race.tWin, 0, 1) : 0;
   drawFx(dt, racing, u);
   audioFrame(racing && !V.settled, racing && V.slow && !V.settled, u);
@@ -1369,15 +1716,46 @@ function start(){
   $('nick').value = S.nick;
   $('nick').addEventListener('input', e => { S.nick = clean(e.target.value) || 'ななし'; save(); pushPresence(); });
   const paintTools = () => {
-    $('btnBgm').setAttribute('aria-pressed', String(S.bgm)); $('btnSfx').setAttribute('aria-pressed', String(S.sfx));
-    $('btnFx').setAttribute('aria-pressed', String(!S.calm)); setText($('btnFx'), S.calm ? '演出ひかえめ' : '演出全開');
+    $('btnBgm').setAttribute('aria-pressed', String(S.bgm)); setText($('btnBgm'), 'BGM:' + (S.bgm ? 'オン' : 'オフ'));
+    $('btnSfx').setAttribute('aria-pressed', String(S.sfx)); setText($('btnSfx'), '効果音:' + (S.sfx ? 'オン' : 'オフ'));
+    $('btnFx').setAttribute('aria-pressed', String(!S.calm)); setText($('btnFx'), '演出:' + (S.calm ? 'ひかえめ' : '全開'));
+    $('btnTts').setAttribute('aria-pressed', String(S.tts)); setText($('btnTts'), '実況の読み上げ:' + (S.tts ? 'オン' : 'オフ'));
     $('btnRoom').setAttribute('aria-pressed', String(roomOpen)); document.body.classList.toggle('room-open', roomOpen);
     if (A.ctx) { A.music.gain.setTargetAtTime(S.bgm ? 0.55 : 0, A.ctx.currentTime, 0.03); A.sfx.gain.setTargetAtTime(S.sfx ? 0.9 : 0, A.ctx.currentTime, 0.03); }
   };
   $('btnBgm').addEventListener('click', () => { S.bgm = !S.bgm; save(); audioUnlock(); paintTools(); });
   $('btnSfx').addEventListener('click', () => { S.sfx = !S.sfx; save(); audioUnlock(); paintTools(); sClick(); });
   $('btnFx').addEventListener('click', () => { S.calm = !S.calm; save(); paintTools(); sClick(); });
-  $('btnRoom').addEventListener('click', () => { roomOpen = !roomOpen; paintTools(); });
+  $('btnTts').addEventListener('click', () => { S.tts = !S.tts; save(); paintTools(); if (S.tts) speak('実況をオンにしました', true); else try { window.speechSynthesis.cancel(); } catch (e) {} });
+  $('btnRoom').addEventListener('click', () => { roomOpen = !roomOpen; closeMenu(); paintTools(); });
+  $('roomClose').addEventListener('click', () => { roomOpen = false; paintTools(); $('btnRoom').focus(); });
+  $('btnMenu').addEventListener('click', e => { e.stopPropagation(); const m = $('menu'); m.hidden = !m.hidden; $('btnMenu').setAttribute('aria-expanded', String(!m.hidden)); if (!m.hidden) { const f = m.querySelector('button'); if (f) f.focus(); } });
+  $('btnAbout').addEventListener('click', () => { closeMenu(); if (window.FKAbout) window.FKAbout.open(); });
+  $('btnRec').addEventListener('click', () => { setRecTab(missionReady() ? 'mis' : recTab); openModal('rec'); });
+  for (const k of ['mis', 'ach', 'rec']) $('t-' + k).addEventListener('click', () => setRecTab(k));
+  $('rec').querySelector('.tabs').addEventListener('keydown', e => {
+    const order = ['mis', 'ach', 'rec'], i = order.indexOf(recTab);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const k = order[(i + (e.key === 'ArrowRight' ? 1 : 2)) % 3]; setRecTab(k); $('t-' + k).focus(); }
+  });
+  $('rec').addEventListener('click', e => {
+    const cl = e.target.closest('[data-claim]'), af = e.target.closest('[data-af]');
+    if (cl) openTreasure(Number(cl.dataset.claim), cl);
+    else if (af) { achFilter = af.dataset.af; renderAch(); const again = $('p-ach').querySelector('[data-af="' + achFilter + '"]'); if (again) again.focus(); }
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-close]')) closeModal();
+    else if (modalOpen && e.target === modalOpen) closeModal();
+    if (!e.target.closest('#menu') && !e.target.closest('#btnMenu')) closeMenu();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { if (modalOpen) closeModal(); else closeMenu(); return; }
+    if (e.key === 'Tab' && modalOpen) {   // ダイアログの外にフォーカスを出さない
+      const f = Array.from(modalOpen.querySelectorAll('button, a[href], input')).filter(x => !x.disabled && x.offsetParent !== null);
+      if (!f.length) return;
+      if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+      else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+    }
+  });
   paintTools();
   document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => setBet(c.dataset.bet === 'all' ? 'all' : Number(c.dataset.bet))));
   $('stamps').replaceChildren(...STAMPS.map((s, k) => {
@@ -1395,7 +1773,7 @@ function start(){
     window.location.href = inviteUrl(code);
   });
   document.addEventListener('keydown', e => {
-    if (e.target && e.target.tagName === 'INPUT') return;
+    if ((e.target && e.target.tagName === 'INPUT') || modalOpen || document.querySelector('.fka-back')) return;
     if (e.key >= '1' && e.key <= '6' && !e.ctrlKey && !e.metaKey && !e.altKey) pick(Number(e.key));
   });
   document.addEventListener('pointerdown', audioUnlock, {passive:true});
@@ -1407,9 +1785,23 @@ function start(){
   const onResize = () => { resize3D(); resizeFx(); };
   window.addEventListener('resize', onResize);
   onResize();
+  // ヘッダーと投票パネルの高さに合わせて、ほかの表示の位置をずらす
+  const root = document.documentElement.style, topEl = $('top'), sheetEl = $('sheet');
+  const measure = () => { root.setProperty('--hud-top', topEl.offsetHeight + 'px'); root.setProperty('--sheet-h', sheetEl.offsetHeight + 'px'); };
+  if (window.ResizeObserver) { const ro = new ResizeObserver(measure); ro.observe(topEl); ro.observe(sheetEl); }
+  window.addEventListener('resize', measure);
+  measure();
+  ensureDaily();
+  try { if (localStorage.getItem('fastkeiba.dbseen') === '1') checkAch({type:'boot', dbSeen:true}); } catch (e) {}
+  checkAch({type:'boot'});
+  // 初めての人にはジョークサイトの告知を出し、閉じたらログインボーナス
+  const afterAbout = v => { if (v === 'calm') { S.calm = true; save(); paintTools(); } setTimeout(loginBonus, v === 'seen' ? 500 : 150); };
+  if (window.FKAbout) window.FKAbout.ready.then(afterAbout); else afterAbout('seen');
   tick();
   setInterval(tick, 100);
   requestAnimationFrame(frame);
 }
+// 動作確認用(?debug=1 のときだけ)。コインは元々自己申告なので、これで困ることはない
+if (/[?&]debug=1/.test(window.location.search)) window.__fk = {get G(){ return G; }, V, me, S, checkAch, showLucky, celebrate, rollLucky, openModal, setRecTab};
 start();
 })();
