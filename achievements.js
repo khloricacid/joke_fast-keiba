@@ -120,6 +120,7 @@ window.FK_ACH = (() => {
     A('rainbowWin', '隠し', 'h', '伝説になった', '「伝説」で払戻30倍以上', {test:c => W(c) && c.ev.skillGrade >= 4 && c.ev.tier >= 4}, true),
     A('allinLegend', '隠し', 'h', '全ツッパの神に愛された', '全ツッパで「伝説」を引いて勝つ', {test:c => W(c) && c.ev.all && c.ev.skillGrade >= 4}, true),
     A('rush10', '隠し', 'h', 'ドパミン無限機関', 'ドパミンRUSHで10連チャン', {test:c => (c.st.bestRush || 0) >= 10}, true),
+    A('doom10', '隠し', 'h', '終了のお知らせ常連', 'ほかの馬の「伝説」で負けが決まる 10回', {test:c => (c.st.dooms || 0) >= 10}, true),
     A('rescue', '隠し', 'h', 'へこたれない', '破産したところを馬主に助けてもらう', {test:c => S_(c) && c.ev.rescue}, true),
     A('kyouyaru', '隠し', 'h', '本当に今日やった', '明日 弥留の「今日やる」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '今日やる'}, true),
     A('deshou', '隠し', 'h', 'でしょうね', 'シュウチュウゼロが気を散らしたレースで、シュウチュウゼロに賭けていた', {test:c => S_(c) && c.ev.horse === 'シュウチュウゼロ' && c.ev.traitHit}, true)

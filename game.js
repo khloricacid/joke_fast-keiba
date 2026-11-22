@@ -465,7 +465,7 @@ function settle(forced){
         S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1;
         if (!forced && (Math.random() < 0.1 || (DEMO && DEMO.owner))) {
           if (DEMO) { DEMO.owner = false; demoSync(); }
-          const gift = Math.max(10000, Math.ceil(L.bet * 2 / 1000) * 1000);
+          const gift = Math.max(1500000, Math.ceil(L.bet * 0.5 / 1000) * 1000);   // 最低150万。大きく賭けていたら賭け金の半分
           res.rescue = {gift, horse:h.name, owner:DATA ? DATA.horses[h.id].owner : '謎の馬主'};
           S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
           V.hold = 8500;   // 進行役は演出が終わるまで次のレースを待つ(終わったら実際にかかった分に縮める)
@@ -852,6 +852,8 @@ function sRumble(dur){
 }
 // 文字が叩きつけられる重低音
 function sBoom(k){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 75 - k * 10, t, 1.1 + k * 0.4, 1, 26); tone(A.sfx, 'triangle', 150, t, 0.25, 0.5, 40); hiss(A.sfx, t, 0.9 + k * 0.3, 0.9, 'lowpass', 700, 0.7, 60); } }
+// 「終了のお知らせ」:沈む短調と、チーン
+function sDoom(){ if (sfxOK()) { const t = A.ctx.currentTime; [[57, 60, 64], [56, 59, 62], [55, 58, 62]].forEach((ch, i) => ch.forEach(n => tone(A.sfx, 'triangle', mtof(n), t + i * 0.32, 0.5, 0.07))); tone(A.sfx, 'sine', 1760, t + 1.05, 2.4, 0.22); tone(A.sfx, 'sine', 2637, t + 1.05, 1.6, 0.09); tone(A.sfx, 'sine', 3520, t + 1.05, 0.9, 0.04); } }
 function sLegendChord(){ if (sfxOK()) { const t = A.ctx.currentTime; [60, 64, 67, 72, 76, 79, 84, 88, 91, 96].forEach((n, i) => { tone(A.sfx, 'sawtooth', mtof(n), t + i * 0.03, 1.2, 0.05); tone(A.sfx, 'square', mtof(n + 12), t + i * 0.03, 0.4, 0.03); }); } }
 function sOmen(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sawtooth', 300, t, 0.7, 0.14, 2600); tone(A.sfx, 'square', 600, t, 0.7, 0.06, 5200); [84, 88, 91, 96].forEach((n, i) => tone(A.sfx, 'square', mtof(n), t + 0.7 + i * 0.05, 0.18, 0.09)); } }
 function sChance(){ if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'square', mtof(79), t, 0.08, 0.1); tone(A.sfx, 'square', mtof(86), t + 0.09, 0.14, 0.1); } }
@@ -1489,7 +1491,7 @@ function startOmen(now){
 }
 // そのレースで止めている(止めた)時間。進行役が待ち時間に足す
 function pauseFor(n){ return n && n === V.n ? Math.round(V.pauseTotal + (V.pauseUntil ? V.pauseLen : 0) + (V.hold || 0)) : 0; }
-const LEGEND_MS = 3300, LEGEND_PRE = 700, LEGEND_MAIN = 3900, RESCUE_MS = 4600;
+const LEGEND_MS = 3300, LEGEND_PRE = 700, LEGEND_MAIN = 3900, RESCUE_MS = 4600, DOOM_MS = 3200;
 // プチュン!と画面が十字に消えて完全に暗転し、2文字が叩きつけられてから光で戻ってくる。伝説と馬主の救済で共用
 function blackout(o){
   const quiet = calm(), D = o.ms, k = D / LEGEND_MS;
@@ -1513,9 +1515,10 @@ function blackout(o){
   at(900, () => { if (sfxOK()) { const t = A.ctx.currentTime; tone(A.sfx, 'sine', 3200, t, 0.5, 0.08, 5200); hiss(A.sfx, t, 0.4, 0.15, 'highpass', 6000, 2); } });
   at(1300 * k, () => { sHit(0); if (o.heavy) sBoom(0); buzz(o.heavy ? [120] : 60); });
   at(1560 * k, () => { sHit(1); if (o.heavy) sBoom(1); buzz(o.heavy ? [200] : 80); });
-  at(1850 * k, () => { sLegendChord(); buzz([100, 50, 100, 50, 200]); if (o.speak) speak(o.speak, true); });
+  at(1850 * k, () => { if (o.sad) { sDoom(); buzz([300]); } else { sLegendChord(); buzz([100, 50, 100, 50, 200]); } if (o.speak) speak(o.speak, true); });
   at(2800 * k, () => {
-    B.remove('crt-hide'); B.add(quiet ? 'crt-fadein' : 'crt-on');
+    B.remove('crt-hide'); B.add(quiet || o.sad ? 'crt-fadein' : 'crt-on');
+    if (o.sad) { if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.25, A.ctx.currentTime, 0.3); if (o.reveal) o.reveal(); return; }
     if (!quiet) { flash('rainbow'); rays = 1; raysRb = true; for (let i = 0; i < 10; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.35, Math.random() * 360, 80), 150 + i * 120); }
     if (A.ctx && S.bgm) { const t = A.ctx.currentTime; A.music.gain.setTargetAtTime(0.55, t, 0.02); hiss(A.music, t, 1.6, 0.4, 'highpass', 3500, 0.5); }
     sHorn();
@@ -1537,6 +1540,18 @@ function startLegend(h, now){
     blackout({ms:LEGEND_MAIN, cls:'heavy', heavy:true, c:['伝', '説'], who:sk.jockey + '(' + h.no + '番 ' + h.name + ')', name:'「' + sk.name + '」', hue:(sk.jki * 37 + 12) % 360,
       speak:sk.jockey + 'の、' + sk.name + '!', reveal:() => castSay(h.no + '番 ' + h.name + '、伝説の末脚!', true)});
   }, LEGEND_PRE);
+}
+// 自分が賭けていない馬に伝説が出たとき:負けが決まったことを「終了のお知らせ」で見せる
+function startDoom(h, now){
+  const sk = h.skill;
+  V.legendOn = true; V.omenShown = true;
+  V.pauseStart = now; V.pauseUntil = now + DOOM_MS; V.pauseLen = DOOM_MS; dirty = true;
+  $('skillin').className = ''; $('omen').className = '';
+  const fans = lastPs.filter(p => !p.isMe && !p.away && p.pick && p.pick.n === V.n && p.pick.s === V.seed && p.pick.h === h.no).map(p => p.nick);
+  const who = fans.length ? fans.slice(0, 2).join('さんと') + 'さん' + (fans.length > 2 ? 'たち' : '') + 'の馬に伝説…' : h.no + '番 ' + h.name + 'に伝説…';
+  blackout({ms:DOOM_MS, cls:'doom', sad:true, c:['伝', '説'], who, name:'終了のお知らせ', hue:0, speak:'終了のお知らせ',
+    reveal:() => { castSay(h.no + '番 ' + h.name + '、伝説発動。' + (fans.length ? fans[0] + 'さん、おめでとう' : '勝負あり'), true); toast(who.replace('…', '') + '。あなたの馬券は紙くずに', ''); }});
+  inc('dooms');
 }
 // 破産したとき1%で、賭けていた馬の馬主が現れてコインをくれる
 const RESCUE_LINE = 'こんなところでへこたれてはだめだ';
@@ -1577,6 +1592,7 @@ function showSkill(h, mine){
   V.skillShown.add(h.no); V.skillOn[h.no] = sk.grade;
   sSkill(sk.grade, mine);
   if (!mine) {
+    if (sk.grade >= 4 && V.locked && !V.legendOn) { startDoom(h, performance.now()); return; }
     if (sk.grade >= 4) { ribbon('★★ 伝説発動!! ' + sk.jockey + '「' + sk.name + '」(' + h.no + '番 ' + h.name + ')', 'g-rainbow'); castSay(h.no + '番 ' + h.name + '、伝説発動!', true); if (!calm()) starBurst(0.85, 0.3, 16, 0); buzz([60, 40, 60]); }
     else ribbon('★ ' + sk.jockey + '「' + sk.name + '」【' + g.name + '】', 'g-' + g.id);
     return;
@@ -1753,7 +1769,7 @@ function celebrate(res){
   if (res.cross) setTimeout(() => {
     toast('大台突破! 所持コイン' + CROSS[res.cross], 'gold'); flash('gold'); coinRain(90); sHorn(); buzz([80, 40, 80, 40, 200]);
     if (!calm()) for (let i = 0; i < 6; i++) setTimeout(() => firework(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.25, 48, 80), i * 160);
-  }, res.jp ? 3400 : 2100);
+  }, res.rescue ? 900 + RESCUE_MS + 400 : res.jp ? 3400 : 2100);
   elPop.className = cls;
 }
 function shout(text, hue){

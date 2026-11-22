@@ -750,6 +750,14 @@ body.legend-pre #vig{opacity:1;animation:none;box-shadow:inset 0 0 160px 60px #0
 #legend.calm.heavy.go{animation:lgBg var(--lgD,3.9s) linear forwards}
 #legend.calm.heavy .gogo,#legend.calm.heavy .wave{display:none}
 body.calm.legend-pre #gl{transform:none}
+/* 終了のお知らせ:ほかの馬の伝説で負けが決まった人向け。色のない伝説と、明朝体の告知 */
+#legend.doom .lgRays,#legend.doom .crack,#legend.doom .lgWho .face{display:none}
+#legend.doom .chars b{background:linear-gradient(180deg,#f2f2f2 10%,#9a9a9a 60%,#5a5a5a);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:2px #bbb;filter:drop-shadow(0 0 10px rgba(255,255,255,.25))}
+#legend.doom .lgWho{font-size:clamp(14px,3.8vw,22px);color:#ddd;font-weight:700}
+#legend.doom .lgName{font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;font-weight:700;color:#fff;background:none;-webkit-background-clip:border-box;background-clip:border-box;letter-spacing:.18em;
+  font-size:clamp(30px,9vw,76px);filter:none;text-shadow:0 0 18px rgba(255,255,255,.35);animation:lgDoom var(--lgD,3.2s) linear both}
+@keyframes lgDoom{0%,54%{opacity:0;transform:scale(1.04)}60%,90%{opacity:1;transform:none}97%,100%{opacity:0}}
+#legend.calm.doom .lgName{animation:lgDoom var(--lgD,3.2s) steps(1,end) both}
 /* 馬主の救済:セリフを読めるように長めに出す */
 #legend.owner .chars b{background:linear-gradient(180deg,#fff 10%,#ffe9a8 40%,#e8b23a 70%,#9a6a10);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 22px rgba(255,255,255,.9)) drop-shadow(0 0 50px rgba(255,190,60,.85))}
 #legend.owner .lgName{font-size:clamp(15px,4.6vw,42px);padding:0 3vw;line-height:1.25;animation:lgOwn var(--lgD,4.6s) linear both,slide 1s linear infinite}
