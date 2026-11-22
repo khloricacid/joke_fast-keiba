@@ -169,9 +169,12 @@ function buildRace(seed, force){
     if (DATA) h.coat = DATA.horses[h.id].coat;
     h.amp = 0.012 + r() * 0.02; h.fq = 1 + r() * 1.5; h.ph = r() * 6.28;
   }
-  // 伝説の発動は大穴ほど遅く(オッズ2倍で50%地点、30倍以上で84%地点)。発動の瞬間はまだ先頭にいないように、後ろから一気に来る脚にする
+  // 伝説の発動地点は、そのレースの出走馬の中でのオッズの位置で決める(いちばん人気で50%地点、いちばん人気薄で84%地点)。
+  // 発動の瞬間はまだ先頭にいないように、後ろから一気に来る脚にする
   if (legend) {
-    const at = clamp(0.48 + 0.1 * Math.log2(legend.odds / 2), 0.5, 0.84), tau = at * legend.T;
+    const lo = Math.log(Math.min(...hs.map(h => h.odds))), hi = Math.log(Math.max(...hs.map(h => h.odds)));
+    const rel = hi > lo ? (Math.log(legend.odds) - lo) / (hi - lo) : 0.5;
+    const at = 0.5 + 0.34 * rel, tau = at * legend.T;
     legend.skill.at = at;
     let best = 0;
     for (const h of hs) if (h !== legend) best = Math.max(best, Math.pow(tau / h.T, h.k) + h.amp);
