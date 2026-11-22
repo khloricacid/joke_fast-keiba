@@ -806,3 +806,30 @@ body.calm.legend-pre #gl{transform:none}
 #demo button[aria-pressed=true]{border-color:#fff;box-shadow:0 0 14px #fff}
 #demo small{flex-basis:100%;color:#ddd;text-align:center;font-size:12px}
 body.legend-bg #demo,body.is-run #demo,body.is-res #demo{visibility:hidden}
+
+/* ================= どんなに桁が増えても見切れない ================= */
+/* 縮めて入れる文字(game.js の fitText)。入りきらないときだけ小さくなる */
+#coins,#jpVal,#raceNo{white-space:nowrap;display:inline-block;max-width:30vw;vertical-align:bottom}
+#jpVal{max-width:16vw}
+.jp span,.wallet span{white-space:nowrap}
+.pop b,.pop i,.pop em{white-space:nowrap;max-width:100%}
+.pop{padding:0 calc(14px + env(safe-area-inset-right)) 0 calc(14px + env(safe-area-inset-left))}
+.callout{max-width:calc(100vw - 28px);white-space:normal;overflow-wrap:anywhere}
+.stakeInfo{overflow-wrap:anywhere}
+.players .cn{white-space:nowrap}
+@media (max-width:560px){
+  /* 2段:1段目 レベル+バッジ、2段目 レース番号・ジャックポット・所持コイン */
+  .meta{flex-wrap:wrap;row-gap:3px;justify-content:flex-end}
+  .meta::before{content:"";order:3;flex-basis:100%;height:0}
+  .lv{order:0;flex:1 1 0;min-width:0}
+  .lv span{max-width:none}
+  .fever{order:1}
+  .rush{order:2}
+  .raceNo{order:4;margin-right:auto}
+  .jp{order:5}
+  .wallet{order:6}
+  #raceNo{max-width:30vw}
+  #jpVal{max-width:22vw}
+  #coins{max-width:40vw}
+}
+.wallet b{transform-origin:100% 50%}

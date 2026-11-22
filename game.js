@@ -3,6 +3,20 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const fmt = n => Math.round(n).toLocaleString('ja-JP');
+// 狭い場所用の短い表記(1.2億、345万)
+const fmtS = n => { n = Math.round(n); const u = [[1e16, '京'], [1e12, '兆'], [1e8, '億'], [1e4, '万']].find(x => n >= x[0]); if (!u) return fmt(n); const v = n / u[0]; return (v >= 100 ? Math.floor(v) : Math.floor(v * 10) / 10) + u[1]; };
+// はみ出す文字は、その場で入りきる大きさまで縮める(どんなに桁が増えても画面から見切れない)
+function fitText(el){
+  if (!el) return;
+  el.style.fontSize = '';
+  if (!el.textContent) return;
+  const o = el.style.overflow; el.style.overflow = 'hidden';
+  const sw = el.scrollWidth, cw = el.clientWidth;
+  el.style.overflow = o;
+  if (cw > 0 && sw > cw + 1) el.style.fontSize = (parseFloat(getComputedStyle(el).fontSize) * cw / sw * 0.94).toFixed(1) + 'px';
+}
+// 文字数が変わったときだけ測り直す(毎フレーム変わる数字用)
+function setFit(el, t){ if (el.textContent === t) return; const re = el._fitN !== t.length; el.textContent = t; if (re) { el._fitN = t.length; fitText(el); } }
 const setText = (el, s) => { if (el.textContent !== s) el.textContent = s; };
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1568,7 +1582,7 @@ function startRescue(res){
       b.textContent = '+0'; V.payAnim = {from:0, to:r.gift, t0:performance.now(), dur:1400, last:-1};
       V.coinShow = null; dirty = true;
       if (r.ev) setTimeout(() => { missionProgress(r.ev); checkAch(r.ev); save(); }, 1200);
-      elPop.className = 'pop show t4' + (unlocked(7) ? ' rb' : '');
+      elPop.className = 'pop show t4' + (unlocked(7) ? ' rb' : ''); fitPop();
       coinRain(110); confetti(160); coinFly(36); sWin(4);
       toast(r.owner + 'から ' + fmt(r.gift) + 'コイン', 'gold');
       castSay(r.horse + 'の馬主、' + r.owner + 'が現れた!', true);
@@ -1752,7 +1766,7 @@ function celebrate(res){
     else if (res.rush) setTimeout(() => { callout('RUSH ' + res.rush + '連チャン!!', 'lead'); sLevel(); buzz([40, 30, 40, 30, 120]); }, res.jp ? 3600 : 2000);
     if (res.jp) setTimeout(() => {
       a.textContent = 'JACKPOT!!'; elPop.className = 'pop show t4 jp';
-      V.payAnim = {from:res.pay, to:res.pay + res.jp, t0:performance.now(), dur:1600, last:-1};
+      V.payAnim = {from:res.pay, to:res.pay + res.jp, t0:performance.now(), dur:1600, last:-1}; fitPop();
       flash('rainbow'); shake(true); burst = 1; coinRain(220); confetti(300); sHorn(); setTimeout(sHorn, 700);
       for (let i = 0; i < 14; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.35, Math.random() * 360, 90), i * 140);
       buzz([100, 50, 100, 50, 100, 50, 400]); toast('ジャックポット +' + fmt(res.jp) + 'コイン', 'gold'); checkAch({type:'jackpot'});
@@ -1776,6 +1790,14 @@ function celebrate(res){
     if (!calm()) for (let i = 0; i < 6; i++) setTimeout(() => firework(0.15 + Math.random() * 0.7, 0.15 + Math.random() * 0.25, 48, 80), i * 160);
   }, res.rescue ? 900 + RESCUE_MS + 400 : res.jp ? 3400 : 2100);
   elPop.className = cls;
+  fitPop();
+}
+// 払戻の表示は、カウントアップの最後の数字が入りきる大きさに合わせる
+function fitPop(){
+  const a = $('popA'), b = $('popB'), c = $('popC');
+  fitText(a); fitText(c);
+  const P = V.payAnim;
+  if (P) { const cur = b.textContent; b.textContent = '+' + fmt(P.to); fitText(b); b.textContent = cur; } else fitText(b);
 }
 function shout(text, hue){
   const s = document.createElement('span');
@@ -1804,7 +1826,7 @@ function ui(ps, now){
   B.toggle('is-gold', !!R.gold && !quiet);
   B.toggle('calm', quiet);
   A.fever = S.streak >= 2;
-  setText($('raceNo'), '第' + V.n + 'R' + (DATA && R.sky < 3 ? ' ' + DATA.skies[R.sky] : ''));
+  setFit($('raceNo'), '第' + V.n + 'R' + (DATA && R.sky < 3 ? ' ' + DATA.skies[R.sky] : ''));
   const fv = $('fever'), mult = streakMult(S.streak);
   fv.hidden = mult === 1; setText(fv, mult >= 1.5 ? 'FEVER 払戻×1.5' : '連勝ボーナス×1.2');
   const lv = lvOf(S.xp), base = lv > 1 ? xpNeed(lv - 1) : 0;
@@ -1866,7 +1888,7 @@ function ui(ps, now){
   }
   setText($('btnRoom'), n > 1 ? '部屋 ' + n + '人' : '友だちを呼ぶ');
   if (n > 1 && !autoOpened) { autoOpened = true; if (window.innerWidth >= 900 && !roomOpen) $('btnRoom').click(); }
-  setText($('jpVal'), fmt(S.jp));
+  setFit($('jpVal'), fmt(S.jp));
   $('combo').dataset.n = String(S.combo); $('combo').classList.toggle('max', S.combo >= 5);
   $('recDot').hidden = !missionReady();
   const tb = ps.filter(p => p.tb > 0).sort((a, b) => b.tb - a.tb)[0];
@@ -1883,9 +1905,9 @@ function ui(ps, now){
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.nick;
       const y = document.createElement('small'); y.textContent = (p.isMe ? 'あなた ' : '') + 'Lv.' + p.lv; nm.appendChild(y);
       const pk = document.createElement('span'); pk.className = 'pk';
-      if (inRound(p)) pk.append(badge(p.pick.h), document.createTextNode(fmt(p.pick.bet)));
+      if (inRound(p)) pk.append(badge(p.pick.h), document.createTextNode(p.pick.bet >= 1e6 ? fmtS(p.pick.bet) : fmt(p.pick.bet)));
       else pk.textContent = p.away ? '離席' : p.sit ? '見' : canBet ? '考え中' : '';
-      const cn = document.createElement('span'); cn.className = 'cn'; cn.textContent = fmt(p.coins);
+      const cn = document.createElement('span'); cn.className = 'cn'; cn.textContent = p.coins >= 1e6 ? fmtS(p.coins) : fmt(p.coins);
       li.append(rk, dot, nm, pk, cn);
       return li;
     }));
@@ -2077,7 +2099,7 @@ function frame(){
   if (bq !== beatShown) { beatShown = bq; document.documentElement.style.setProperty('--beat', (bq / 5).toFixed(1)); }
   const coinTo = coinView();
   if (Math.abs(coinTo - shownCoins) > 0.5) shownCoins += (coinTo - shownCoins) * 0.14; else shownCoins = coinTo;
-  setText(elCoins, fmt(shownCoins));
+  setFit(elCoins, fmt(shownCoins));
   requestAnimationFrame(frame);
 }
 
@@ -2177,7 +2199,7 @@ function start(){
     if (me.away) me.g = null;
     pushPresence(); tick();
   });
-  const onResize = () => { resize3D(); resizeFx(); };
+  const onResize = () => { resize3D(); resizeFx(); for (const id of ['coins', 'jpVal', 'raceNo']) { const e = $(id); e._fitN = -1; fitText(e); } fitPop(); };
   window.addEventListener('resize', onResize);
   onResize();
   // ヘッダーと投票パネルの高さに合わせて、ほかの表示の位置をずらす
