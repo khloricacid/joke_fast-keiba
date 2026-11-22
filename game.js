@@ -24,7 +24,7 @@ const NAMES = [
   'シュウチュウゼロ','ネムクナイモン','マタアシタヤル','レンダノオニ','トバシミジョウズ','イマスグホシイ'
 ];
 const STAMPS = ['うおおお','草','は?','神','差せ!','そのまま!'];
-const BET_MS = 7000;
+const GRACE_MS = 5000;                  // 最初の1人が賭けてから締切までの時間
 const KEY = 'fastkeiba.v2';
 const TL = 260;                         // コースの長さ
 const SL_PRE = 0.45, SL_POST = 0.07, SL_RATE = 0.3;   // ゴール前スローモーション
@@ -110,10 +110,10 @@ const streakMult = s => s >= 2 ? 1.5 : s === 1 ? 1.2 : 1;
 /* ================= ゲーム進行 ================= */
 const PID = Array.from({length:12}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 const me = {pick:null, sit:false, missed:0, away:document.hidden, g:null, emo:null};
-const V = {n:0, seed:-1, ph:'idle', race:null, betStart:0, raceStart:0, settled:false, settledAt:0, late:false, locked:null, res:null,
+const V = {n:0, seed:-1, ph:'idle', race:null, betStart:0, firstPick:0, raceStart:0, settled:false, settledAt:0, late:false, locked:null, res:null,
   lead:0, slow:false, stretch:false, myRank:0};
-let lastG = null, hostPhaseAt = 0, dirty = false, lastSent = 0;
-let net = null, roomCode = 'lobby';
+let lastG = null, hostPhaseAt = 0, hostFirstPick = 0, dirty = false, lastSent = 0;
+let net = null, roomCode = 'lobby', netOpts = null;
 const others = new Map(), linkPid = new Map(), seenPeers = new Set(), emoSeen = new Map();
 
 const isInt = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
@@ -162,7 +162,7 @@ function netOpen(){
         if (pid && !Array.from(linkPid.values()).includes(pid)) others.delete(pid);
       },
       onError(){}
-    });
+    }, netOpts);
     pushPresence();
   } catch (e) { net = null; }
 }
@@ -186,9 +186,11 @@ function drive(ps, now){
   if (g.ph === 'bet') {
     const has = p => !!(p.pick && p.pick.n === g.n && p.pick.s === g.seed);
     const picked = visible.filter(has);
+    if (!picked.length) hostFirstPick = 0; else if (!hostFirstPick) hostFirstPick = now;
     const allIn = visible.filter(p => !p.sit).every(has);
     const minWait = visible.length > 1 ? 1500 : 0;
-    if (picked.length && ((allIn && el >= minWait) || el >= BET_MS)) {
+    // 全員が賭けたら即発走。そうでなければ最初の1人から GRACE_MS 後に締め切る
+    if (picked.length && ((allIn && el >= minWait) || now - hostFirstPick >= GRACE_MS)) {
       me.g = {n:g.n, seed:g.seed, ph:'run', hs:g.hs}; hostPhaseAt = now; dirty = true;
     }
   } else {
@@ -203,7 +205,7 @@ function observe(g, now){
   if (g.n !== V.n || g.seed !== V.seed) {
     if (V.ph === 'run' && !V.settled) settle(true);
     V.n = g.n; V.seed = g.seed; V.race = buildRace(g.seed);
-    V.ph = 'bet'; V.betStart = now; V.settled = false; V.locked = null; V.late = false; V.res = null;
+    V.ph = 'bet'; V.betStart = now; V.firstPick = 0; V.settled = false; V.locked = null; V.late = false; V.res = null;
     V.lead = 0; V.slow = false; V.stretch = false; V.myRank = 0;
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
@@ -860,11 +862,13 @@ function ui(ps, now){
   let text = '', fuse = 0;
   if (V.late) text = 'レース中。次のレースから賭けられます';
   else if (V.ph === 'bet') {
-    const left = Math.max(0, BET_MS - (now - V.betStart));
+    const any = ps.some(inRound);
+    if (!any) V.firstPick = 0; else if (!V.firstPick) V.firstPick = now;
+    const left = any ? Math.max(0, GRACE_MS - (now - V.firstPick)) : GRACE_MS;
     if (!multi) text = A.ctx ? '馬をタップ。その瞬間に発走' : '馬をタップ。その瞬間に発走(BGMも鳴ります)';
-    else if (myH) { text = '投票ずみ。ほかの人を待っています'; fuse = left / BET_MS; }
-    else if (left > 0) { text = '馬をタップで投票 締切まで' + Math.ceil(left / 1000) + '秒'; fuse = left / BET_MS; }
-    else text = 'だれかが賭けた瞬間に発走';
+    else if (myH) { text = '投票ずみ。全員そろうか、あと' + Math.ceil(left / 1000) + '秒で発走'; fuse = left / GRACE_MS; }
+    else if (any) { text = '急げ!締切まで' + Math.ceil(left / 1000) + '秒'; fuse = left / GRACE_MS; }
+    else text = '馬をタップで投票。全員そろうか、最初の1人から5秒で発走';
   }
   setText($('callText'), text);
   $('fuse').style.width = (fuse * 100).toFixed(1) + '%';
@@ -876,6 +880,10 @@ function ui(ps, now){
   const n = ps.length, netEl = $('net');
   netEl.classList.toggle('on', n > 1);
   setText(netEl, !net ? '接続の準備中' : n > 1 ? n + '人が同じレースに参加中' : (roomCode === 'lobby' ? 'みんなの部屋' : '部屋「' + roomCode + '」') + 'で待機中。URLを送ると合流できます');
+  if (net && net.diag) {
+    const d = net.diag();
+    setText($('diag'), '合図の中継 Nostr ' + d.nostr.open + '/' + d.nostr.total + '・MQTT ' + d.mqtt.open + '/' + d.mqtt.total + ' 直結 ' + (d.links.nostr + d.links.mqtt) + '本');
+  }
   setText($('btnRoom'), n > 1 ? '部屋 ' + n + '人' : '友だちを呼ぶ');
   if (n > 1 && !autoOpened) { autoOpened = true; if (window.innerWidth >= 900 && !roomOpen) $('btnRoom').click(); }
   setText($('stStreak'), String(S.streak));
@@ -972,6 +980,9 @@ function start(){
   try {
     const q = new URLSearchParams(window.location.search).get('room');
     if (q) { const c = q.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16); if (c) roomCode = c; }
+    // 開発用:自分のPCで動かしたMQTTブローカーだけを使う(?relay=ws://localhost:1884)
+    const rl = new URLSearchParams(window.location.search).get('relay');
+    if (rl && /^ws:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/.test(rl)) netOpts = {mqttUrls:[rl], nostrUrls:[]};
   } catch (e) {}
 
   try { G = init3D(); } catch (e) { G = null; }

@@ -190,6 +190,7 @@ body.room-open .room{display:grid}
 .net{font-size:12px;font-weight:700;margin:2px 0 0}
 .net::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#8a93b0;margin-right:6px}
 .net.on::before{background:var(--pay)}
+.diag{font-size:10px;opacity:.7;margin:2px 0 0;font-variant-numeric:tabular-nums}
 .nick{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700}
 .nick input,.invite input{flex:1;min-width:0;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:4px;padding:6px 8px;font-weight:700;font-size:14px;user-select:text;-webkit-user-select:text}
 .invite{display:grid;grid-template-columns:1fr 1fr;gap:6px}
