@@ -111,7 +111,8 @@ function prog(h, tau){
 
 /* ================= 保存する自分の状態 ================= */
 const S = {coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
-  st:{}, daily:null, login:{last:'', streak:0}, combo:0, boost:1, jp:5000, tb:{d:'', v:0}};
+  st:{}, daily:null, login:{last:'', streak:0}, combo:0, boost:1, jp:5000, tb:{d:'', v:0},
+  cur:null, pend:null};   // cur:次に出すレース(リロードで引き直せないように保存) / pend:発走後、確定前の賭け
 function clean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁯]/g, '').slice(0, 10); }
 function adopt(d){
   if (!d || typeof d !== 'object') return;
@@ -135,6 +136,11 @@ function adopt(d){
   if (Number.isInteger(d.combo)) S.combo = clamp(d.combo, 0, 5);
   if (Number.isFinite(d.boost)) S.boost = clamp(d.boost, 1, 2);
   if (Number.isFinite(d.jp)) S.jp = clamp(Math.floor(d.jp), 5000, 1e9);
+  const okInt = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
+  if (d.cur && okInt(d.cur.n, 1, 1e9) && okInt(d.cur.seed, 0, 4294967295)) S.cur = {n:d.cur.n, seed:d.cur.seed};
+  const pd = d.pend;
+  if (pd && okInt(pd.n, 1, 1e9) && okInt(pd.s, 0, 4294967295) && okInt(pd.h, 1, 6) && okInt(pd.bet, 1, 1e12) && Number.isFinite(pd.odds) && Number.isFinite(pd.mult))
+    S.pend = {n:pd.n, s:pd.s, h:pd.h, bet:pd.bet, odds:clamp(pd.odds, 1, 100), mult:clamp(pd.mult, 1, 10), quick:!!pd.quick, all:!!pd.all};
   if (d.tb && typeof d.tb.d === 'string' && Number.isFinite(d.tb.v)) S.tb = {d:d.tb.d.slice(0, 10), v:clamp(Math.floor(d.tb.v), 0, 1e12)};
   if (Number.isFinite(d.streak)) S.streak = Math.max(0, Math.floor(d.streak));
   if (Number.isFinite(d.best)) S.best = Math.max(S.coins, Math.floor(d.best));
@@ -221,7 +227,11 @@ function elect(ps){
 }
 function drive(ps, now){
   if (!me.g) {
-    me.g = lastG ? {n:lastG.n, seed:lastG.seed, ph:lastG.ph, hs:Date.now()} : {n:1, seed:newSeed(), ph:'bet', hs:Date.now()};
+    if (lastG) me.g = {n:lastG.n, seed:lastG.seed, ph:lastG.ph, hs:Date.now()};
+    else {
+      if (!S.cur) { S.cur = {n:1, seed:newSeed()}; save(); }
+      me.g = {n:S.cur.n, seed:S.cur.seed, ph:'bet', hs:Date.now()};
+    }
     hostPhaseAt = now; dirty = true;
   }
   const g = me.g, el = now - hostPhaseAt;
@@ -239,7 +249,7 @@ function drive(ps, now){
   } else {
     const dur = (V.race && V.seed === g.seed ? V.race.dur : 6.5) * 1000;
     if (el >= dur + (visible.length > 1 ? 3200 : 2700)) {
-      me.g = {n:g.n + 1, seed:newSeed(), ph:'bet', hs:g.hs}; hostPhaseAt = now; dirty = true;
+      me.g = {n:g.n + 1, seed:S.cur && S.cur.n === g.n + 1 ? S.cur.seed : newSeed(), ph:'bet', hs:g.hs}; hostPhaseAt = now; dirty = true;
     }
   }
 }
@@ -254,6 +264,7 @@ function observe(g, now){
     if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.05);
     if (me.pick && !(me.pick.n === g.n && me.pick.s === g.seed)) { me.pick = null; dirty = true; }
     if (g.ph === 'run') { V.ph = 'run'; V.late = true; V.settled = true; }
+    else if (!S.cur || S.cur.n !== g.n || S.cur.seed !== g.seed) { S.cur = {n:g.n, seed:g.seed}; save(); }
     renderRound();
     audioMode(0);
   }
@@ -286,6 +297,8 @@ function startRace(now){
     me.missed++; S.combo = 0; sessRun = 0;
     if (me.missed >= 2 && !me.sit) me.sit = true;
   }
+  S.pend = V.locked ? {n:V.n, s:V.seed, h:V.locked.h, bet:V.locked.bet, odds:V.locked.odds, mult:V.locked.mult, quick:V.locked.quick, all:V.locked.all} : null;
+  S.cur = {n:V.n + 1, seed:newSeed()};
   save();
   dirty = true;
   castSay('スタートしました!', true);
@@ -340,6 +353,7 @@ function settle(forced){
     }
     res.cross = [1e4, 1e5, 1e6, 1e7, 1e8].filter(x => before < x && S.coins >= x).pop() || 0;
     S.best = Math.max(S.best, S.coins);
+    S.pend = null;
     missionProgress(ev);
     checkAch(ev);
     save();
@@ -1655,6 +1669,22 @@ function openTreasure(i, btn){
   setTimeout(() => { if (recTab === 'mis' && modalOpen) renderMissions(); }, 2200);
 }
 
+// レース中にページを閉じたりリロードしたりした賭けを、次に開いたときに精算する
+let pendMsg = '';
+function resolvePending(){
+  const P = S.pend;
+  if (!P) return;
+  V.n = P.n; V.seed = P.s; V.race = buildRace(P.s); V.ph = 'run';
+  V.locked = {h:P.h, bet:P.bet, odds:P.odds, mult:P.mult, quick:P.quick, all:P.all, deadline:false};
+  V.omen = false; V.comboHit = false;
+  settle(true);
+  const r = V.res;
+  pendMsg = r ? '前回のレース(第' + P.n + 'R)の結果:' + (r.type === 'win' ? '的中 +' + fmt(r.pay + (r.jp || 0)) : r.bust ? 'ハズレ(破産)' : 'ハズレ') : '';
+  V.ph = 'idle'; V.n = 0; V.seed = -1; V.race = null; V.locked = null; V.res = null; V.settled = false;
+  shownCoins = S.coins;
+  elBoard.hidden = true;
+}
+
 /* ================= メインループ ================= */
 let lastFrame = performance.now(), beatShown = -1;
 // 確定のあと1.3秒だけ、ゴール前をもう一度スローで映す
@@ -1793,9 +1823,10 @@ function start(){
   measure();
   ensureDaily();
   try { if (localStorage.getItem('fastkeiba.dbseen') === '1') checkAch({type:'boot', dbSeen:true}); } catch (e) {}
+  resolvePending();
   checkAch({type:'boot'});
   // 初めての人にはジョークサイトの告知を出し、閉じたらログインボーナス
-  const afterAbout = v => { if (v === 'calm') { S.calm = true; save(); paintTools(); } setTimeout(loginBonus, v === 'seen' ? 500 : 150); };
+  const afterAbout = v => { if (v === 'calm') { S.calm = true; save(); paintTools(); } if (pendMsg) toast(pendMsg, 'win'); setTimeout(loginBonus, v === 'seen' ? 500 : 150); };
   if (window.FKAbout) window.FKAbout.ready.then(afterAbout); else afterAbout('seen');
   tick();
   setInterval(tick, 100);
