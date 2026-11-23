@@ -524,7 +524,7 @@ function settle(forced){
         S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1;
         if (!forced && (DEMO ? DEMO.owner : Math.random() < 0.1)) {
           if (DEMO) { DEMO.owner = false; demoSync(); }
-          const gift = Math.max(1500000, Math.ceil(L.bet * 0.5 / 1000) * 1000);   // 最低150万。大きく賭けていたら賭け金の半分
+          const gift = Math.max(50000, Math.ceil(L.bet * 0.5 / 1000) * 1000);   // 最低5万。大きく賭けていたら賭け金の半分
           res.rescue = {gift, horse:h.name, owner:DATA ? DATA.horses[h.id].owner : '謎の馬主'};
           V.coinShow = S.coins; S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
           V.hold = 8500;   // 進行役は演出が終わるまで次のレースを待つ(終わったら実際にかかった分に縮める)
