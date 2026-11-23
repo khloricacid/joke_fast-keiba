@@ -249,7 +249,7 @@ function prog(h, tau){
 }
 
 /* ================= 保存する自分の状態 ================= */
-const S = {rush:0, push:0, betBack:null, coins:1000, nick:'', hue:0, bet:1000, bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
+const S = {rush:0, push:0, betBack:null, coins:1000, nick:'', hue:0, bet:'t0', bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
   st:{}, daily:null, login:{last:'', streak:0}, combo:0, boost:1, jp:5000, tb:{d:'', v:0},
   cur:null, pend:null};   // cur:次に出すレース(リロードで引き直せないように保存) / pend:発走後、確定前の賭け
 function clean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁯]/g, '').slice(0, 10); }
@@ -258,7 +258,9 @@ function adopt(d){
   if (Number.isFinite(d.coins) && d.coins > 0) S.coins = Math.min(1e12, Math.floor(d.coins));
   if (typeof d.nick === 'string' && clean(d.nick)) S.nick = clean(d.nick);
   if (Number.isFinite(d.hue)) S.hue = ((Math.floor(d.hue) % 360) + 360) % 360;
-  if (d.bet === 'all' || (Number.isInteger(d.bet) && d.bet >= 1 && d.bet <= 1e12)) S.bet = d.bet;
+  // 賭け金の設定:'all'(全ツッパ) / 't0'〜't3'(最低額の×1・×2・×5・×10。所持コインにつれて動く) / 数(自分で入れた額)
+  const okBet = b => b === 'all' || /^t[0-3]$/.test(b) || (Number.isInteger(b) && b >= 1 && b <= 1e12);
+  if (okBet(d.bet)) { const i = [1000, 2000, 5000, 10000].indexOf(d.bet); S.bet = i >= 0 ? 't' + i : d.bet; }
   for (const k of ['bgm', 'sfx', 'calm', 'tts']) if (typeof d[k] === 'boolean') S[k] = d[k];
   if (Number.isFinite(d.xp)) S.xp = clamp(Math.floor(d.xp), 0, 1e9);
   if (d.ach && typeof d.ach === 'object') for (const a of ACHD.list) if (d.ach[a.id]) S.ach[a.id] = true;
@@ -275,7 +277,7 @@ function adopt(d){
   if (Number.isInteger(d.combo)) S.combo = clamp(d.combo, 0, 5);
   if (Number.isInteger(d.rush)) S.rush = clamp(d.rush, 0, 9999);
   if (Number.isInteger(d.push)) S.push = clamp(d.push, 0, 999);
-  if (d.betBack === 'all' || (Number.isInteger(d.betBack) && d.betBack >= 1 && d.betBack <= 1e12)) S.betBack = d.betBack;
+  if (okBet(d.betBack)) S.betBack = d.betBack;
   if (Number.isFinite(d.boost)) S.boost = clamp(d.boost, 1, 2);
   if (Number.isFinite(d.jp)) S.jp = clamp(Math.floor(d.jp), 5000, 1e9);
   const okInt = (x, lo, hi) => Number.isInteger(x) && x >= lo && x <= hi;
@@ -524,7 +526,7 @@ function settle(forced){
         S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1;
         if (!forced && (DEMO ? DEMO.owner : Math.random() < 0.1)) {
           if (DEMO) { DEMO.owner = false; demoSync(); }
-          const gift = Math.max(50000, Math.ceil(L.bet * 0.5 / 1000) * 1000);   // 最低5万。大きく賭けていたら賭け金の半分
+          const gift = 50000;   // いくら賭けていても一律5万
           res.rescue = {gift, horse:h.name, owner:DATA ? DATA.horses[h.id].owner : '謎の馬主'};
           V.coinShow = S.coins; S.coins = Math.min(1e12, S.coins + gift); ev.rescue = true; inc('rescues'); addSpent(0);
           V.hold = 8500;   // 進行役は演出が終わるまで次のレースを待つ(終わったら実際にかかった分に縮める)
@@ -781,7 +783,22 @@ function offerChoice(res){
       onNo(auto){ if (res.push) { inc('pushOuts'); if (res.push >= 2) inc('pushOut2'); callout('勝ち逃げ成功! ' + res.push + '連', 'up'); sKakutei(); checkAch({type:'push'}); } else if (!auto) sClick(); }});
   }
 }
-function stakeNow(){ return S.bet === 'all' ? S.coins : Math.min(S.bet, S.coins); }
+// 最低賭け金:所持コインの1割を、切りのいい数(1・2・5の並び)に切り上げた額。持てば持つほど大きく賭けさせる
+const MIN_BET_RATE = 0.1, BET_MULT = [1, 2, 5, 10];
+function minBet(){
+  const x = S.coins * MIN_BET_RATE;
+  let m = 1000;
+  for (let p = 1000; m < x && p <= 1e12; p *= 10) for (const k of [1, 2, 5]) { m = k * p; if (m >= x) break; }
+  return Math.max(1, Math.min(m, S.coins));
+}
+// いまの設定での賭け金(所持コインで頭打ちにする前)
+function betNum(b){
+  if (b === undefined) b = S.bet;
+  if (b === 'all') return S.coins;
+  if (typeof b === 'string') return BET_MULT[Number(b[1])] * minBet();
+  return Math.max(b, minBet());
+}
+function stakeNow(){ return Math.min(betNum(), S.coins); }
 function myHorseNo(){
   if (V.locked) return V.locked.h;
   return me.pick && me.pick.n === V.n && me.pick.s === V.seed ? me.pick.h : 0;
@@ -811,7 +828,6 @@ function pick(no){
   pushPresence();
   tick();
 }
-const BET_PRESETS = [1000, 2000, 5000, 10000];
 const betLabel = n => n >= 10000 ? fmtS(n) : fmt(n);
 // 「3万」「1.5億」「３００００」「30,000」などを数に
 function parseBet(t){
@@ -823,20 +839,21 @@ function parseBet(t){
 function openBetIn(){
   audioUnlock(); sClick();
   const inp = $('betInVal');
-  setText($('betInHave'), '所持 ' + fmt(S.coins) + 'コイン。好きな金額を入れてね(「3万」もOK)');
-  inp.value = S.bet === 'all' ? '' : String(S.bet);
+  setText($('betInHave'), '所持 ' + fmt(S.coins) + 'コイン。いまの最低は ' + fmt(minBet()) + 'コイン(「3万」のような書き方もOK)');
+  inp.value = S.bet === 'all' ? '' : String(betNum());
   setText($('betInErr'), '');
   openModal('betIn');
   setTimeout(() => { inp.focus(); inp.select(); }, 30);
 }
 function betInQuick(q){
-  const inp = $('betInVal'), cur = parseBet(inp.value) || (S.bet === 'all' ? S.coins : S.bet);
-  const v = q === 'half' ? Math.max(1, Math.floor(cur / 2)) : q === 'x2' ? cur * 2 : q === 'x10' ? cur * 10 : S.coins;
+  const inp = $('betInVal'), cur = parseBet(inp.value) || betNum();
+  const v = q === 'half' ? Math.max(minBet(), Math.floor(cur / 2)) : q === 'x2' ? cur * 2 : q === 'x10' ? cur * 10 : S.coins;
   inp.value = String(clamp(Math.floor(v), 1, 1e12)); setText($('betInErr'), ''); sClick();
 }
 function betInOk(){
   const v = parseBet($('betInVal').value);
-  if (!(v >= 1)) { setText($('betInErr'), '1以上の数字を入れてね'); buzz(60); return; }
+  if (!(v >= 1)) { setText($('betInErr'), '数字を入れてね'); buzz(60); return; }
+  if (v < minBet()) { setText($('betInErr'), 'いまの最低は ' + fmt(minBet()) + 'コイン。もっと賭けよう'); buzz(60); return; }
   closeModal();
   setBet(Math.min(1e12, v));
   if (v > S.coins) toast('所持コインより多いので、賭けるときは全額(' + fmt(S.coins) + ')になります', '');
@@ -2129,13 +2146,16 @@ function ui(ps, now){
   setText($('callText'), text);
   $('call').classList.toggle('gold', !!R.gold);
   $('fuse').style.width = (fuse * 100).toFixed(1) + '%';
-  const preset = S.bet === 'all' || BET_PRESETS.includes(S.bet);
+  const preset = typeof S.bet === 'string', mb = minBet();
+  if (V.minShown && mb > V.minShown && V.ph === 'bet') { toast('最低賭け金アップ! ' + betLabel(mb) + 'コインから', 'gold'); sLevel(); }
+  V.minShown = mb;
   B.toggle('is-push', S.push > 0); B.toggle('is-judge', !!V.judge && V.judge.type === 'inq' && !quiet); B.toggle('has-choice', !!V.choice); B.toggle('judging', !!V.judge);
   document.querySelectorAll('.chip').forEach(c => {
-    const on = String(c.dataset.bet === 'custom' ? !preset : String(S.bet) === c.dataset.bet);
+    const on = String(c.dataset.bet === 'custom' ? !preset : S.bet === c.dataset.bet);
+    if (c.dataset.bet[0] === 't') setText(c, betLabel(betNum(c.dataset.bet)));
     if (c.getAttribute('aria-pressed') !== on) c.setAttribute('aria-pressed', on);
   });
-  setText($('chipCustom'), preset ? '金額…' : (S.push > 0 ? '倍P ' : '✎') + betLabel(S.bet));
+  setText($('chipCustom'), preset ? '金額…' : (S.push > 0 ? '倍P ' : '✎') + betLabel(betNum()));
 
   const n = ps.length, netEl = $('net');
   netEl.classList.toggle('on', n > 1);
@@ -2444,7 +2464,7 @@ function start(){
     }
   });
   paintTools();
-  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.dataset.bet === 'custom' ? openBetIn() : setBet(c.dataset.bet === 'all' ? 'all' : Number(c.dataset.bet))));
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.dataset.bet === 'custom' ? openBetIn() : setBet(c.dataset.bet)));
   $('betInOk').addEventListener('click', betInOk);
   $('chYes').addEventListener('click', () => answerChoice(true));
   $('chNo').addEventListener('click', () => answerChoice(false));
@@ -2529,7 +2549,7 @@ function demoPanel(){
     me.pick = null; me.g = {n:me.g.n, seed, ph:'bet', hs:me.g.hs}; S.cur = {n:me.g.n, seed}; hostPhaseAt = performance.now();
     tick();
     S.push = 0; S.betBack = null; S.rush = 0;
-    if (all) { S.coins = 30000; S.bet = 'all'; } else { if (S.coins < 20000) S.coins = 20000; S.bet = 5000; }
+    if (all) { S.coins = 30000; S.bet = 'all'; } else { if (S.coins < 20000) S.coins = 20000; S.bet = 't1'; }
     pick(kind === 'stop' ? R.stopNo : kind === 'gyaku' ? R.order[1] : kind === 'bust' ? R.order[5] : R.vis[0]);
   };
   mk('e1', '▶ 審議→降着', () => race('demote'));
