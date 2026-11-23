@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body class="is-bet">
 <canvas id="gl" aria-hidden="true"></canvas>
@@ -19,6 +19,12 @@
 <canvas id="fx" aria-hidden="true"></canvas>
 <div id="frame" aria-hidden="true"></div>
 <div id="flash" aria-hidden="true"></div>
+<div id="choice" role="group" aria-labelledby="chTitle" hidden>
+  <p class="chT" id="chTitle"></p><p class="chS" id="chSub"></p>
+  <div class="chB"><button type="button" id="chYes"></button><button type="button" id="chNo"></button></div>
+  <div class="chBar"><span><i id="chFill"></i></span><b id="chSec"></b></div>
+</div>
+<div id="judge" aria-live="assertive"><i class="scan"></i><b id="jgLamp"></b><span id="jgText"></span></div>
 <div id="omen" aria-hidden="true"><small>確定演出</small><b>激アツ!!</b><i>この馬、くるぞ</i></div>
 <div id="legend" aria-hidden="true"><i class="cross"></i><i class="crack"></i><div class="gogo"><b>ゴ</b><b>ゴ</b><b>ゴ</b><b>ゴ</b><b>ゴ</b><b>ゴ</b></div><i class="wave w1"></i><i class="wave w2"></i><i class="lgRays"></i><svg class="ownerArt" viewBox="0 0 400 400" aria-hidden="true">
   <defs>
@@ -197,7 +203,7 @@
 <script src="vendor/three.min.js"></script>
 <script src="vendor/net.js?v=2" async></script>
 <script src="data.js?v=3"></script>
-<script src="achievements.js?v=6"></script>
-<script src="game.js?v=19"></script>
+<script src="achievements.js?v=7"></script>
+<script src="game.js?v=20"></script>
 </body>
 </html>

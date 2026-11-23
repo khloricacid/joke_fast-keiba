@@ -846,3 +846,76 @@ body.legend-bg #demo,body.is-run #demo,body.is-res #demo{visibility:hidden}
   .stake{gap:4px}
 }
 @media (max-width:360px){.chip{padding:6px 6px;font-size:12px}}
+
+/* ================= 審議・写真判定・競走中止の札 ================= */
+#judge{position:fixed;left:0;right:0;top:calc(var(--hud-top) + 64px);z-index:6;display:none;justify-items:center;gap:6px;pointer-events:none;text-align:center;padding:0 12px}
+#judge.go{display:grid}
+#judge b{font-family:var(--font-display);font-weight:400;font-size:clamp(34px,10vw,72px);line-height:1;padding:8px 24px 10px;border-radius:8px;border:4px solid #fff;color:#fff;letter-spacing:.08em;white-space:nowrap;
+  animation:jgIn .28s cubic-bezier(.2,1.6,.4,1) both}
+#judge span{font-weight:900;font-size:clamp(12px,3.4vw,16px);background:rgba(10,10,20,.88);color:#fff;padding:4px 10px;border-radius:4px;max-width:100%}
+#judge span:empty{display:none}
+#judge.inq b{background:#d6101c;box-shadow:0 0 40px rgba(255,40,60,.9);animation:jgIn .28s cubic-bezier(.2,1.6,.4,1) both,jgBlink .46s .3s steps(2,jump-none) infinite}
+#judge.photo b{background:#111;border-color:#ffd60a;color:#ffd60a;box-shadow:0 0 30px rgba(255,214,10,.6)}
+#judge.stop b{background:repeating-linear-gradient(-45deg,#16130f 0 14px,#3a3000 14px 28px);border-color:#ffd60a;color:#ffd60a}
+#judge.ok b{background:#12a150;border-color:#fff;color:#fff;box-shadow:0 0 40px rgba(40,255,140,.9);animation:jgIn .3s cubic-bezier(.2,1.6,.4,1) both}
+#judge.ng b{background:#16130f;border-color:#ff4a5a;color:#ff4a5a;box-shadow:0 0 40px rgba(255,40,60,.7);animation:jgSlam .4s cubic-bezier(.2,1.6,.4,1) both}
+#judge .scan{display:none}
+#judge.photo:not(.ok) .scan{display:block;position:fixed;top:0;bottom:0;left:0;width:4px;background:#fff;box-shadow:0 0 18px 6px rgba(255,255,255,.8);animation:jgScan 1.9s linear both}
+@keyframes jgIn{from{transform:scale(2.4);opacity:0}to{transform:none;opacity:1}}
+@keyframes jgSlam{0%{transform:scale(3) rotate(-8deg);opacity:0}60%{transform:scale(.92) rotate(-3deg);opacity:1}100%{transform:rotate(-3deg)}}
+@keyframes jgBlink{0%{background:#d6101c;color:#fff}100%{background:#4a060a;color:#ff9aa2}}
+@keyframes jgScan{from{left:0}to{left:100%}}
+body.is-judge #vig{opacity:1;animation:none;box-shadow:inset 0 0 120px rgba(255,30,50,.5)}
+.board .lamp.prov{background:#d6101c;animation:jgBlink .46s steps(2,jump-none) infinite}
+#judge.calm b,body.calm .board .lamp.prov{animation:none}
+#judge.calm .scan{display:none!important}
+
+/* ================= カウントダウンつきの二択(倍プッシュ / RUSHの全ツッパ) ================= */
+#choice{position:fixed;left:50%;transform:translateX(-50%);bottom:max(9vh,calc(20px + env(safe-area-inset-bottom)));z-index:8;width:min(94vw,440px);box-sizing:border-box;padding:10px 12px 12px;border-radius:12px;
+  background:rgba(10,10,24,.95);border:3px solid var(--pay);box-shadow:0 0 30px rgba(255,214,10,.5),0 8px 30px rgba(0,0,0,.6);text-align:center;color:#fff;transition:bottom .25s;animation:chIn .3s cubic-bezier(.2,1.5,.4,1) both}
+#choice[hidden]{display:none}
+body.is-bet #choice{bottom:calc(var(--sheet-h) + 12px)}
+#choice.rush{border-color:#ff5af0;box-shadow:0 0 30px rgba(255,90,240,.6),0 8px 30px rgba(0,0,0,.6)}
+#choice p{margin:0}
+#choice .chT{font-family:var(--font-display);font-size:clamp(18px,5.4vw,24px);color:var(--pay);line-height:1.15}
+#choice.rush .chT{color:#ff9ad5}
+#choice .chS{font-size:12.5px;font-weight:700;margin-top:4px;line-height:1.35;opacity:.95}
+#choice .chB{display:grid;grid-template-columns:1.5fr 1fr;gap:8px;margin-top:9px}
+#choice button{min-height:50px;border-radius:9px;border:3px solid var(--ink);font-family:var(--font-display);font-size:clamp(16px,4.8vw,21px);color:var(--ink);padding:4px 6px}
+#chYes{background:linear-gradient(90deg,#ff2d3d,#ffd60a);box-shadow:0 0 calc(6px + 14px*var(--beat)) rgba(255,90,40,.9);animation:chPulse .4s ease-in-out infinite alternate}
+#chNo{background:#cfcabc;font-size:clamp(13px,3.8vw,16px)!important}
+#choice button:active{transform:scale(.94)}
+#choice .chBar{position:relative;height:10px;margin-top:9px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}
+#choice .chBar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff2d3d,#ffd60a)}
+#choice .chBar b{position:absolute;right:6px;top:-22px;font-family:var(--font-display);font-weight:400;font-size:16px;color:#fff}
+@keyframes chIn{from{transform:translateX(-50%) translateY(40px) scale(.8);opacity:0}to{transform:translateX(-50%);opacity:1}}
+@keyframes chPulse{from{transform:scale(1)}to{transform:scale(1.04)}}
+body.calm #chYes{animation:none}
+body.is-push .chip.custom[aria-pressed="true"]{background:linear-gradient(90deg,#ff2d3d,#ffd60a);border-color:#ffd60a;animation:flame .35s ease-in-out infinite alternate}
+body.calm.is-push .chip.custom[aria-pressed="true"]{animation:none}
+
+/* ================= 払戻の倍率ドン・数え終わりの決め・溶ける数字 ================= */
+.pop.show i.odds{color:#fff!important;font-size:clamp(50px,16vw,130px)!important;animation:slam .3s cubic-bezier(.2,1.6,.4,1) both!important}
+.pop.show i.fin{animation:finBump .5s cubic-bezier(.2,1.6,.4,1) both,throb .32s .5s ease-in-out infinite alternate!important}
+@keyframes finBump{0%{transform:rotate(-4deg) scale(1.55);filter:brightness(3)}100%{transform:rotate(-4deg) scale(1);filter:brightness(1)}}
+.pop.lose i.melt{color:#ff6a75;opacity:1;animation:melt 1.5s ease-in both!important}
+.pop.bust i.melt{font-size:clamp(34px,11vw,84px)}
+@keyframes melt{0%{transform:rotate(-4deg) scale(1.6);filter:blur(0)}12%{transform:rotate(-4deg) scale(1)}100%{transform:rotate(-4deg) translateY(14px) scaleY(1.28);filter:blur(1.2px);opacity:.75;letter-spacing:.04em}}
+body.calm .pop i.odds,body.calm .pop i.fin,body.calm .pop i.melt{animation:none!important}
+@media (prefers-reduced-motion:reduce){
+  #judge b,.board .lamp.prov,#chYes,#choice{animation:none!important}
+  #judge .scan{display:none!important}
+  .pop i.odds,.pop i.fin,.pop i.melt{animation:none!important}
+}
+
+#demo{top:30%;gap:5px;padding:8px}
+#demo button{font-size:12px;padding:6px 8px}
+#demo button[data-k^=e]{background:#2b2f55;color:#fff;border-color:#8a90d8}
+body.has-choice #demo{visibility:hidden}
+#choice .chBar{display:flex;align-items:center;gap:8px;height:auto;background:none;overflow:visible}
+#choice .chBar span{flex:1;height:10px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}
+#choice .chBar i{display:block;height:100%}
+#choice .chBar b{position:static;font-family:var(--font-display);font-weight:400;font-size:20px;line-height:1;color:var(--pay);min-width:.8em;text-align:right}
+#choice .chS{overflow-wrap:anywhere}
+/* 小さい画面では、判定中は暫定の着順板を出さない(審議の札と重なるので) */
+@media (max-height:700px),(max-width:360px){body.judging .board{display:none}#judge{top:calc(var(--hud-top) + 44px)}}

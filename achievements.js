@@ -48,6 +48,11 @@ window.FK_ACH = (() => {
     A('comeback', '連勝', 's', '大逆転', '破産してから所持コイン 1万まで戻す', {test:c => (c.st.comebacks || 0) >= 1}),
 
     // ---- 賭け方 ----
+    A('push1', '賭け方', 'b', '倍プッシュ', '倍プッシュに乗って的中', {test:c => (c.st.bestPush || 0) >= 1, prog:c => [Math.min(1, c.st.bestPush || 0), 1]}),
+    A('push3', '賭け方', 's', '倍々ゲーム', '倍プッシュ 3連成功', {test:c => (c.st.bestPush || 0) >= 3, prog:c => [Math.min(3, c.st.bestPush || 0), 3]}),
+    A('push5', '賭け方', 'g', '止まれない人', '倍プッシュ 5連成功', {test:c => (c.st.bestPush || 0) >= 5, prog:c => [Math.min(5, c.st.bestPush || 0), 5]}),
+    A('pushOut', '賭け方', 's', '勝ち逃げ', '倍プッシュ2連以上で勝ち逃げする', cnt('pushOut2', 1)),
+    A('rushAll', '賭け方', 's', 'RUSH全ツッパ', 'RUSH中に全ツッパを選んで的中', cnt('rushAllWins', 1)),
     A('allin', '賭け方', 'b', '全ツッパ成功', '500コイン以上の全ツッパで的中', {test:c => W(c) && c.ev.all && c.ev.bet >= 500}),
     A('allin3', '賭け方', 's', '全ツッパ3連', '全ツッパで3連続的中', {test:c => (c.st.allinStreak || 0) >= 3, prog:c => [Math.min(3, c.st.allinStreak || 0), 3]}),
     A('allinBust', '賭け方', 'b', '散り際', '全ツッパで破産する', {test:c => S_(c) && c.ev.all && c.ev.bust}),
@@ -78,6 +83,9 @@ window.FK_ACH = (() => {
     A('gradeGold', '馬・騎手', 's', '超激アツ', '自分の馬で金のカットインを見る', cnt('myGold', 1)),
     A('rushIn', '馬・騎手', 's', 'RUSH突入', '自分の馬の「伝説」で勝ってドパミンRUSHに入る', cnt('rushes', 1)),
     A('rush5', '馬・騎手', 'g', '止まらない', 'ドパミンRUSHで5連チャン', {test:c => (c.st.bestRush || 0) >= 5, prog:c => [Math.min(5, c.st.bestRush || 0), 5]}),
+    A('sashi', '展開', 'b', '差し切り', 'ゴール前で差し切って的中', cnt('sashiN', 1)),
+    A('nosed', '展開', 'b', 'あと数センチ', 'ずっと先頭だったのにゴール前で差される', cnt('nosedN', 1)),
+    A('nosed10', '展開', 's', '差され慣れ', 'ゴール前で差される 10回', cnt('nosedN', 10)),
     A('gradeRainbow', '馬・騎手', 'g', '伝説の目撃者', '自分の馬で「伝説」(虹)を見る', cnt('myRainbow', 1)),
     A('tenjo', '馬・騎手', 'g', '天井到達', '課金 重の「天井到達」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '天井到達'}),
     A('buzzWin', '馬・騎手', 'b', 'バズった', 'バズリタイシが爆発したレースで的中', {test:c => W(c) && c.ev.horse === 'バズリタイシ' && c.ev.traitHit}),
@@ -121,6 +129,10 @@ window.FK_ACH = (() => {
     A('allinLegend', '隠し', 'h', '全ツッパの神に愛された', '全ツッパで「伝説」を引いて勝つ', {test:c => W(c) && c.ev.all && c.ev.skillGrade >= 4}, true),
     A('rush10', '隠し', 'h', 'ドパミン無限機関', 'ドパミンRUSHで10連チャン', {test:c => (c.st.bestRush || 0) >= 10}, true),
     A('doom10', '隠し', 'h', '終了のお知らせ常連', 'ほかの馬の「伝説」で負けが決まる 10回', {test:c => (c.st.dooms || 0) >= 10}, true),
+    A('demoted', '隠し', 'h', '審議の犠牲者', '1着でゴールしたのに降着になる', {test:c => (c.st.demotedN || 0) >= 1}, true),
+    A('promoted', '隠し', 'h', '棚ぼた', '繰り上がりの1着で的中', {test:c => (c.st.promotedN || 0) >= 1}, true),
+    A('dnf', '隠し', 'h', '紙くずコレクター', '賭けた馬が競走中止になる', {test:c => (c.st.dnfN || 0) >= 1}, true),
+    A('pushFail3', '隠し', 'h', 'あと1回でやめるつもりだった', '倍プッシュ3連以上のあとに外して全部失う', {test:c => (c.st.pushFail3 || 0) >= 1}, true),
     A('rescue', '隠し', 'h', 'へこたれない', '破産したところを馬主に助けてもらう', {test:c => S_(c) && c.ev.rescue}, true),
     A('kyouyaru', '隠し', 'h', '本当に今日やった', '明日 弥留の「今日やる」が発動したレースで的中', {test:c => W(c) && c.ev.skillName === '今日やる'}, true),
     A('deshou', '隠し', 'h', 'でしょうね', 'シュウチュウゼロが気を散らしたレースで、シュウチュウゼロに賭けていた', {test:c => S_(c) && c.ev.horse === 'シュウチュウゼロ' && c.ev.traitHit}, true)
