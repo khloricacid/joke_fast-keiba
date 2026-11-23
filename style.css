@@ -833,3 +833,16 @@ body.legend-bg #demo,body.is-run #demo,body.is-res #demo{visibility:hidden}
   #coins{max-width:40vw}
 }
 .wallet b{transform-origin:100% 50%}
+
+/* 賭け金:1000/2000/5000/1万/好きな金額/全ツッパ */
+.chip.custom[aria-pressed="true"]{background:#2de2ff;border-color:#2de2ff;color:var(--ink)}
+.betInput{display:block;width:100%;box-sizing:border-box;font-family:var(--font-display);font-size:28px;padding:10px 12px;border:3px solid var(--ink);border-radius:6px;background:#fff;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.betInput:focus{outline:3px solid #2de2ff;outline-offset:1px}
+.betQuick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 0}
+.betQuick button{min-height:40px;border:2px solid var(--ink);border-radius:6px;background:#efece2;color:var(--ink);font-weight:900;font-size:14px}
+.betErr{min-height:1.2em;margin:6px 0 8px;color:#c2161f;font-weight:900;font-size:13px}
+@media (max-width:560px){
+  .chip{padding:7px 8px;font-size:13px;min-height:36px}
+  .stake{gap:4px}
+}
+@media (max-width:360px){.chip{padding:6px 6px;font-size:12px}}

@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body class="is-bet">
 <canvas id="gl" aria-hidden="true"></canvas>
@@ -120,9 +120,11 @@
     </div>
     <div class="stake" role="group" aria-label="賭け金">
       <span>賭け金</span>
-      <button class="chip" type="button" data-bet="10" aria-pressed="false">10</button>
-      <button class="chip" type="button" data-bet="100" aria-pressed="true">100</button>
-      <button class="chip" type="button" data-bet="500" aria-pressed="false">500</button>
+      <button class="chip" type="button" data-bet="1000" aria-pressed="true">1000</button>
+      <button class="chip" type="button" data-bet="2000" aria-pressed="false">2000</button>
+      <button class="chip" type="button" data-bet="5000" aria-pressed="false">5000</button>
+      <button class="chip" type="button" data-bet="10000" aria-pressed="false">1万</button>
+      <button class="chip custom" type="button" data-bet="custom" id="chipCustom" aria-pressed="false" aria-haspopup="dialog">金額…</button>
       <button class="chip" type="button" data-bet="all" aria-pressed="false">全ツッパ</button>
       <span class="combo" id="combo" title="続けて賭けるとたまります。満タンの次のレースは払戻×1.3"><em>COMBO</em><i></i><i></i><i></i><i></i><i></i></span>
     </div>
@@ -167,6 +169,18 @@
   </div>
 </div>
 
+<div class="modal" id="betIn" hidden>
+  <div class="mbox small" role="dialog" aria-modal="true" aria-labelledby="betInTitle">
+    <header class="mhead"><h2 id="betInTitle">賭け金を決める</h2><button type="button" class="mclose" data-close>閉じる</button></header>
+    <div class="mbody">
+      <p class="lead" id="betInHave"></p>
+      <input class="betInput" id="betInVal" type="text" inputmode="numeric" enterkeyhint="done" autocomplete="off" placeholder="例: 30000 / 3万" aria-label="賭け金">
+      <div class="betQuick"><button type="button" data-q="half">半分</button><button type="button" data-q="x2">×2</button><button type="button" data-q="x10">×10</button><button type="button" data-q="max">全部</button></div>
+      <p class="betErr" id="betInErr" aria-live="polite"></p>
+      <button type="button" class="bigBtn" id="betInOk">この金額にする</button>
+    </div>
+  </div>
+</div>
 <div class="modal" id="bonus" hidden>
   <div class="mbox small" role="dialog" aria-modal="true" aria-labelledby="bonusTitle">
     <header class="mhead gold"><h2 id="bonusTitle">ログインボーナス</h2></header>
@@ -184,6 +198,6 @@
 <script src="vendor/net.js?v=2" async></script>
 <script src="data.js?v=3"></script>
 <script src="achievements.js?v=6"></script>
-<script src="game.js?v=18"></script>
+<script src="game.js?v=19"></script>
 </body>
 </html>

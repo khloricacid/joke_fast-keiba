@@ -217,7 +217,7 @@ function prog(h, tau){
 }
 
 /* ================= 保存する自分の状態 ================= */
-const S = {rush:0, coins:1000, nick:'', hue:0, bet:100, bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
+const S = {rush:0, coins:1000, nick:'', hue:0, bet:1000, bgm:true, sfx:true, calm:false, tts:false, streak:0, best:1000, busts:0, xp:0, ach:{},
   st:{}, daily:null, login:{last:'', streak:0}, combo:0, boost:1, jp:5000, tb:{d:'', v:0},
   cur:null, pend:null};   // cur:次に出すレース(リロードで引き直せないように保存) / pend:発走後、確定前の賭け
 function clean(s){ return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁯]/g, '').slice(0, 10); }
@@ -226,7 +226,7 @@ function adopt(d){
   if (Number.isFinite(d.coins) && d.coins > 0) S.coins = Math.min(1e12, Math.floor(d.coins));
   if (typeof d.nick === 'string' && clean(d.nick)) S.nick = clean(d.nick);
   if (Number.isFinite(d.hue)) S.hue = ((Math.floor(d.hue) % 360) + 360) % 360;
-  if (d.bet === 'all' || d.bet === 10 || d.bet === 100 || d.bet === 500) S.bet = d.bet;
+  if (d.bet === 'all' || (Number.isInteger(d.bet) && d.bet >= 1 && d.bet <= 1e12)) S.bet = d.bet;
   for (const k of ['bgm', 'sfx', 'calm', 'tts']) if (typeof d[k] === 'boolean') S[k] = d[k];
   if (Number.isFinite(d.xp)) S.xp = clamp(Math.floor(d.xp), 0, 1e9);
   if (d.ach && typeof d.ach === 'object') for (const a of ACHD.list) if (d.ach[a.id]) S.ach[a.id] = true;
@@ -701,6 +701,36 @@ function pick(no){
   buzz(12);
   pushPresence();
   tick();
+}
+const BET_PRESETS = [1000, 2000, 5000, 10000];
+const betLabel = n => n >= 10000 ? fmtS(n) : fmt(n);
+// 「3万」「1.5億」「３００００」「30,000」などを数に
+function parseBet(t){
+  t = String(t).normalize('NFKC').replace(/[,\s円コイン]/g, '');
+  const m = t.match(/^(\d+(?:\.\d+)?)(万|億|兆)?$/);
+  if (!m) return NaN;
+  return Math.floor(Number(m[1]) * ({万:1e4, 億:1e8, 兆:1e12}[m[2]] || 1));
+}
+function openBetIn(){
+  audioUnlock(); sClick();
+  const inp = $('betInVal');
+  setText($('betInHave'), '所持 ' + fmt(S.coins) + 'コイン。好きな金額を入れてね(「3万」もOK)');
+  inp.value = S.bet === 'all' ? '' : String(S.bet);
+  setText($('betInErr'), '');
+  openModal('betIn');
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+}
+function betInQuick(q){
+  const inp = $('betInVal'), cur = parseBet(inp.value) || (S.bet === 'all' ? S.coins : S.bet);
+  const v = q === 'half' ? Math.max(1, Math.floor(cur / 2)) : q === 'x2' ? cur * 2 : q === 'x10' ? cur * 10 : S.coins;
+  inp.value = String(clamp(Math.floor(v), 1, 1e12)); setText($('betInErr'), ''); sClick();
+}
+function betInOk(){
+  const v = parseBet($('betInVal').value);
+  if (!(v >= 1)) { setText($('betInErr'), '1以上の数字を入れてね'); buzz(60); return; }
+  closeModal();
+  setBet(Math.min(1e12, v));
+  if (v > S.coins) toast('所持コインより多いので、賭けるときは全額(' + fmt(S.coins) + ')になります', '');
 }
 function setBet(b){
   audioUnlock();
@@ -1874,10 +1904,12 @@ function ui(ps, now){
   setText($('callText'), text);
   $('call').classList.toggle('gold', !!R.gold);
   $('fuse').style.width = (fuse * 100).toFixed(1) + '%';
+  const preset = S.bet === 'all' || BET_PRESETS.includes(S.bet);
   document.querySelectorAll('.chip').forEach(c => {
-    const on = String(String(S.bet) === c.dataset.bet);
+    const on = String(c.dataset.bet === 'custom' ? !preset : String(S.bet) === c.dataset.bet);
     if (c.getAttribute('aria-pressed') !== on) c.setAttribute('aria-pressed', on);
   });
+  setText($('chipCustom'), preset ? '金額…' : '✎' + betLabel(S.bet));
 
   const n = ps.length, netEl = $('net');
   netEl.classList.toggle('on', n > 1);
@@ -2174,7 +2206,10 @@ function start(){
     }
   });
   paintTools();
-  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => setBet(c.dataset.bet === 'all' ? 'all' : Number(c.dataset.bet))));
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => c.dataset.bet === 'custom' ? openBetIn() : setBet(c.dataset.bet === 'all' ? 'all' : Number(c.dataset.bet))));
+  $('betInOk').addEventListener('click', betInOk);
+  $('betInVal').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); betInOk(); } });
+  document.querySelectorAll('.betQuick button').forEach(b => b.addEventListener('click', () => betInQuick(b.dataset.q)));
   $('stamps').replaceChildren(...STAMPS.map((s, k) => {
     const b = document.createElement('button'); b.type = 'button'; b.id = 'stamp' + k; b.textContent = s;
     b.addEventListener('click', () => stamp(k));
