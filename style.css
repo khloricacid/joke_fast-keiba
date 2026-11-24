@@ -919,3 +919,28 @@ body.has-choice #demo{visibility:hidden}
 #choice .chS{overflow-wrap:anywhere}
 /* 小さい画面では、判定中は暫定の着順板を出さない(審議の札と重なるので) */
 @media (max-height:700px),(max-width:360px){body.judging .board{display:none}#judge{top:calc(var(--hud-top) + 44px)}}
+
+/* ================= BIG BET ================= */
+.chip.big{background:linear-gradient(135deg,#16130f,#3a2a00);color:var(--pay);border-color:var(--pay);font-family:var(--font-display);letter-spacing:.04em}
+.chip.big[aria-pressed="true"]{background:linear-gradient(90deg,#ffd60a,#ff8a00);color:var(--ink);box-shadow:0 0 calc(6px + 14px*var(--beat)) rgba(255,180,0,.95)}
+.chip.bf{min-width:3.4em;font-family:var(--font-display)}
+.chip.bf[data-bf="100"][aria-pressed="true"]{background:var(--lamp);border-color:var(--lamp);color:#fff;animation:flame .35s ease-in-out infinite alternate}
+.chip.bx[aria-pressed="true"]{background:#7a3cff;border-color:#7a3cff;color:#fff}
+body.is-push .chip.bf{opacity:.45}
+.chip[hidden],.ride[hidden]{display:none!important}
+body.is-big .sheet{border-top-color:var(--pay);box-shadow:0 -6px 30px rgba(255,190,0,.35)}
+body.is-big .call{background:linear-gradient(90deg,#16130f,#3a2a00);color:var(--pay)}
+.bigTag{white-space:nowrap;font-family:var(--font-display);font-size:12px;color:var(--ink);padding:2px 8px;border-radius:2px;background:linear-gradient(90deg,#ffd60a,#ff8a00)}
+.ride{display:flex;align-items:center;gap:8px;margin:0 0 6px;padding:5px 8px;border-radius:6px;background:#16130f;color:var(--pay);font-weight:900;font-size:12.5px;border:2px solid var(--pay)}
+.ride span{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.25}
+.ride button{flex:none;min-height:34px;padding:4px 12px;border-radius:6px;border:2px solid var(--ink);background:linear-gradient(90deg,#ff2d3d,#ffd60a);color:var(--ink);font-family:var(--font-display);font-size:14px}
+/* 馬単:選んだ馬に「1着」「2着」の札、ほかの馬には1着からのオッズ */
+.uma[data-pos]::after{content:attr(data-pos);position:absolute;left:2px;right:2px;top:2px;z-index:2;font-family:var(--font-display);font-size:12px;line-height:1.5;text-align:center;border-radius:3px;background:var(--pay);color:var(--ink)}
+.uma[data-pos="2着"]::after{background:#cfd4dc}
+.uma .odds.exo{color:#7a3cff}
+.uma[aria-pressed="true"] .odds.exo{color:#d9c6ff}
+@media (max-width:560px){ .stakeL{display:none} }
+body.calm .chip.bf[aria-pressed="true"],body.calm .chip.big[aria-pressed="true"]{animation:none;box-shadow:none}
+.pop{grid-template-columns:minmax(0,1fr)}
+.uma[aria-pressed="true"]:hover,.uma[aria-pressed="true"]:active{background:var(--ink);color:var(--paper)}
+#choice .chS,#choice .chT{white-space:normal;overflow-wrap:anywhere}
