@@ -468,7 +468,7 @@ function startRace(now){
     if (bet > 0) {
       const P = me.pick, big = P.bg || 0, h2 = P.h2 || 0, gm = R.gold ? 2 : 1, pm = pushMult(S.push);
       let mult;
-      const fate = fateOn() && bet >= S.coins, fm = fate ? 2 : 1;   // 運命のレース:全ツッパを選んだ人だけ払戻×2
+      const fm = !fateOn() ? 1 : bet >= S.coins ? 2 : bet * 2 + 1 >= S.coins ? 1.5 : 1, fate = fm > 1;   // 運命のレース:所持の半分以上を賭けた人は払戻×1.5、全ツッパなら×2
       if (big) mult = BIG_MULT[big] * gm * pm * fm;   // BIG:連勝・秒で決断・コンボ・救済くじの倍率は付かない(コンボと救済くじは次の通常の賭けまで持ち越し)
       else {
         const sm = streakMult(S.streak), qm = V.quick ? 1.1 : 1, bm = S.boost || 1;
@@ -538,7 +538,7 @@ function settle(forced){
       ev.pay = pay; ev.tier = tier; ev.streak = S.streak;
       res = {type:'win', pay, odds:L.odds, mult:L.mult, tier, combo:V.comboHit, h:L.h, h2:L.h2, big:L.big, bigTier:L.tier, ride:L.ride, promoted:ev.promoted, sashi:ev.sashi, photo:R.photo};
       if (L.big) { inc('bigWins'); st.bigBestPay = Math.max(st.bigBestPay || 0, pay); }
-      if (L.fate) { inc('fateWins'); res.fate = true; }
+      if (L.fate) { inc('fateWins'); res.fate = L.all ? 2 : 1.5; }
       if (L.h2) { inc('exWins'); st.exBest = Math.max(st.exBest || 0, L.odds); }
       if (L.ride) inc('rideWins');
       // 倍プッシュ:的中したらいったん元の賭け金に戻す。続けるかどうかは、このあとのカウントダウンで選ぶ
@@ -804,7 +804,8 @@ function openChoice(o){
   closeChoice(false);
   const el = $('choice'), now = performance.now();
   setText($('chTitle'), o.title); setText($('chSub'), o.sub); setText($('chYes'), o.yes); setText($('chNo'), o.no);
-  el.className = o.kind; el.hidden = false;
+  $('chMid').hidden = !o.mid; setText($('chMid'), o.mid || '');   // 3つめの選択肢(あるときだけ)
+  el.className = o.kind + (o.mid ? ' three' : ''); el.hidden = false;
   $('chFill').style.width = '100%';
   V.choice = Object.assign({t0:now, until:now + CHOICE_MS, sec:-1}, o);
   sChance(); buzz([30, 30, 30]);
@@ -815,12 +816,12 @@ function closeChoice(pickDef){
   V.choice = null; $('choice').hidden = true;
   if (pickDef) (C.def === 'yes' ? C.onYes : C.onNo)(true);
 }
-function answerChoice(yes){
+function answerChoice(which){
   const C = V.choice;
   if (!C) return;
   V.choice = null; $('choice').hidden = true;
   audioUnlock();
-  (yes ? C.onYes : C.onNo)(false);
+  (which === 'mid' ? C.onMid : which ? C.onYes : C.onNo)(false);
   save(); tick();
 }
 function choiceFrame(now){
@@ -832,8 +833,8 @@ function choiceFrame(now){
   const sec = Math.ceil(left / 1000);
   if (sec !== C.sec) { C.sec = sec; setText($('chSec'), String(sec)); if (sec <= 3) { sTick(0.2 + (3 - sec) * 0.3); sHeart(); } }
 }
-// ===== 超大金持ち(所持1兆〜)への「すべてを賭ける」誘い =====
-// 主役は自分で選ぶ勝負(悪魔のコイントス、泣きの一回、位上げ勝負、運命のレース)。確率はその場に出し、選ばない・時間切れなら何も起きない。
+// ===== 超大金持ち(所持1兆〜)への大勝負の誘い =====
+// 主役は自分で選ぶ勝負(悪魔のコイントス、泣きの一回、位上げ勝負、運命のレース)。確率はその場に出し、賭ける量も選べる(やめる・半分・全部)。選ばない・時間切れなら何も起きない。
 // 向こうから取りに来るのは「天の取り立て」だけで、まれにしか出ず、2割を納めれば済む(勝負に出るかは自分で選ぶ)。
 const canBetNow = () => V.ph === 'bet' && !V.late;
 const fateOn = () => { const r = richRank(S.coins); return r >= 0 && !!V.race && ((DEMO && DEMO.fate) || V.race.fateRoll < 0.1 + 0.02 * r); };
@@ -846,30 +847,37 @@ function bigSign(lamp, text, cls, ms){
   setTimeout(() => { if (V.stampId === id && !V.judge) { el.className = ''; $('jgLamp').style.fontSize = ''; } }, ms);
 }
 function fixBig(){ if (S.big && S.coins < BIG_MIN) { S.big = false; S.ex = false; S.bigBack = null; } }
-// 全部か、何倍か。結果は選んだ瞬間に決めて保存する(演出の途中で閉じても変わらない)。画面の所持コインは札が返るまで動かさない
-function allOrNothing(o){
-  const before = S.coins, win = DEMO && DEMO.toss != null ? DEMO.toss : Math.random() < o.p;
+// 賭ける割合を自分で選ぶ勝負(半分か、全部か)。当たれば賭けた分が mult 倍になり、外れれば賭けた分を失う。
+// 結果は選んだ瞬間に決めて保存する(演出の途中で閉じても変わらない)。画面の所持コインは札が返るまで動かさない
+function gamble(o){
+  const before = S.coins, all = o.frac >= 1, stake = all ? before : Math.floor(before * o.frac);
+  const win = DEMO && DEMO.toss != null ? DEMO.toss : Math.random() < o.p;
   V.coinShow = before;
-  if (win) { S.coins = Math.min(COIN_MAX, before * o.mult); inc(o.kind + 'Wins'); }
+  if (win) { S.coins = Math.min(COIN_MAX, before + stake * (o.mult - 1)); inc(o.kind + 'Wins'); }
   else {
-    S.st.maxMelt = Math.max(S.st.maxMelt || 0, before); inc(o.kind + 'Losses');
-    S.coins = 1000; S.busts++; S.st.bustFlag = 1; S.rush = 0; S.streak = 0; endStakeMode();
+    S.st.maxMelt = Math.max(S.st.maxMelt || 0, stake); inc(o.kind + 'Losses');
+    if (all) { inc(o.kind + 'Wipes'); S.coins = 1000; S.busts++; S.st.bustFlag = 1; S.rush = 0; S.streak = 0; endStakeMode(); }
+    else S.coins = before - stake;
   }
+  const after = S.coins;
   fixBig(); save();
-  bigSign(o.title, o.wait, 'inq', 1700);
+  bigSign(o.title, (all ? '全部' : '半分') + '賭けた。' + o.wait, 'inq', 1700);
   sRumble(1.3); sHeart(); setTimeout(sHeart, 450); setTimeout(sHeart, 850); buzz([60, 300, 60, 300, 60]);
   setTimeout(() => {
     V.coinShow = null; dirty = true;
     if (win) {
-      bigSign(o.winLamp, fmt(before) + ' → ' + fmt(S.coins), 'ok', 2600);
-      callout(o.winCall, 'lead'); sWin(4); sHorn(); buzz([40, 30, 40, 30, 200]);
-      if (!calm()) { flash('rainbow'); shake(true); coinRain(160); confetti(200); starBurst(0.5, 0.4, 30, 50); }
-    } else {
-      bigSign(o.loseLamp, fmt(before) + 'コインを失った。おこづかい +1,000', 'ng', 3200);
+      bigSign(o.winLamp, o.mult > 1 ? fmt(before) + ' → ' + fmt(after) : 'なにも取られなかった', 'ok', 2600);
+      callout(o.winCall, 'lead'); sWin(all ? 4 : 3); sHorn(); buzz([40, 30, 40, 30, 200]);
+      if (!calm()) { flash(all ? 'rainbow' : 'gold'); shake(all); coinRain(all ? 160 : 90); confetti(all ? 200 : 100); starBurst(0.5, 0.4, 30, 50); }
+    } else if (all) {
+      bigSign(o.loseLamp + ' 全部失った', fmt(before) + 'コインを失った。おこづかい +1,000', 'ng', 3200);
       document.body.classList.add('lost');
       callout(o.loseCall, 'down'); sBust(); sMelt(); buzz([200, 80, 400]); shake(true); ticketRain(140);
       if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.15, A.ctx.currentTime, 0.1);
       setTimeout(() => { document.body.classList.remove('lost'); if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.3); }, 3200);
+    } else {
+      bigSign(o.loseLamp + ' 半分失った', '−' + fmt(stake) + 'コイン(残り ' + fmt(after) + ')', 'ng', 2800);
+      callout(o.loseCall, 'down'); sLose(); sMelt(); buzz([120, 60, 200]); shake(false); ticketRain(50);
     }
     repick(); checkAch({type:'rich'}); save(); tick();
   }, 1500);
@@ -882,33 +890,33 @@ function levyPay(){
   toast('天に ' + fmtS(pay) + ' を納めた', ''); sMelt(); buzz(120);
   checkAch({type:'rich'}); save(); tick();
 }
+// どの誘いも「やめる」「半分だけ」「全部」から選べる。全部を失うのは、自分で「全部」を選んだときだけ
 function richOffer(res){
   const k = res.offer;
   if (!k || S.coins < RICH) return false;
   const blocked = !!V.choice || modalOpen || (me.pick && me.pick.n === V.n && V.ph === 'bet');
+  const half = fmtS(S.coins / 2), full = fmtS(S.coins);
   if (k === 'levy') {
     if (blocked) { levyPay(); return true; }   // もう次に賭けている人は、納めるほうで済ませる
-    openChoice({kind:'levy', def:'no', title:'天の取り立て', sub:'持ちすぎです。所持の2割(' + fmtS(S.coins * 0.2) + ')を納めるか、天と勝負するか。勝負は60%でおとがめなし、40%で全部没収',
-      yes:'勝負だ!!', no:'2割 納める',
-      onYes(){ allOrNothing({kind:'levy', p:0.6, mult:1, title:'天との勝負', wait:'60%でおとがめなし、40%で全部没収', winLamp:'おとがめなし', winCall:'天に勝った!!', loseLamp:'全部没収', loseCall:'天罰…'}); },
+    openChoice({kind:'levy', def:'no', title:'天の取り立て', sub:'持ちすぎです。2割(' + fmtS(S.coins * 0.2) + ')を納めるか、天と勝負するか。勝負は60%でおとがめなし、40%で半分没収。大勝負は60%で逆に2割もらえて、40%で全部没収',
+      yes:'勝負', mid:'大勝負!!', no:'2割 納める',
+      onYes(){ gamble({kind:'levy', frac:0.5, p:0.6, mult:1, title:'天との勝負', wait:'60%でおとがめなし、40%で没収', winLamp:'おとがめなし', winCall:'天に勝った!!', loseLamp:'没収…', loseCall:'天罰…'}); },
+      onMid(){ gamble({kind:'levy', frac:1, p:0.6, mult:1.2, title:'天との大勝負', wait:'60%で2割もらえる、40%で没収', winLamp:'天から2割!!', winCall:'天に勝った!!', loseLamp:'没収…', loseCall:'天罰…'}); },
       onNo(){ levyPay(); }});
     return true;
   }
   if (blocked) return false;
   if (k === 'rank') {
     const nx = UNITS[Math.min(17, richRank(S.coins) + 4)];
-    openChoice({kind:'rank', def:'no', title:'位上げ勝負', sub:'当たれば所持コインが1万倍(' + nx + 'の位へ)、外れれば全部失う。当たる確率は10%',
-      yes:'勝負!!', no:'やめとく',
-      onYes(){ allOrNothing({kind:'rank', p:0.1, mult:1e4, title:'位上げ勝負', wait:'10%で1万倍、90%で全部失う', winLamp:'飛び級!!', winCall:nx + 'の位へ!!', loseLamp:'全部失った', loseCall:'身の程を知った…'}); },
-      onNo(auto){ if (!auto) sClick(); }});
+    const go = frac => gamble({kind:'rank', frac, p:0.1, mult:1e4, title:'位上げ勝負', wait:'10%で1万倍、90%で失う', winLamp:'飛び級!!', winCall:nx + 'の位へ!!', loseLamp:'ハズレ…', loseCall:'身の程を知った…'});
+    openChoice({kind:'rank', def:'no', title:'位上げ勝負', sub:'当たれば賭けた分が1万倍(' + nx + 'の位へ)、外れれば賭けた分を失う。当たる確率は10%。半分(' + half + ')か、全部(' + full + ')か',
+      yes:'半分で勝負', mid:'全部!!', no:'やめとく', onYes(){ go(0.5); }, onMid(){ go(1); }, onNo(auto){ if (!auto) sClick(); }});
     return true;
   }
-  const cry = k === 'cry';
-  openChoice({kind:'devil', def:'no', title:cry ? '泣きの一回' : '悪魔のコイントス',
-    sub:(cry ? '残りの ' + fmtS(S.coins) + ' を全部賭けるコイントス。' : '') + '表なら所持コインが2倍(' + fmtS(Math.min(COIN_MAX, S.coins * 2)) + ')、裏なら全部失う。確率は50%ずつ',
-    yes:cry ? '取り返す!!' : '投げる!!', no:'やめとく',
-    onYes(){ allOrNothing({kind:cry ? 'cry' : 'devil', p:0.5, mult:2, title:cry ? '泣きの一回' : '悪魔のコイントス', wait:'表なら2倍、裏なら全部失う', winLamp:'表!! 2倍', winCall:cry ? '取り返した!!' : '悪魔に勝った!!', loseLamp:'裏… 全部失った', loseCall:cry ? '泣きっ面に蜂…' : '悪魔に持っていかれた…'}); },
-    onNo(auto){ if (!auto) sClick(); }});
+  const cry = k === 'cry', kind = cry ? 'cry' : 'devil', title = cry ? '泣きの一回' : '悪魔のコイントス';
+  const go = frac => gamble({kind, frac, p:0.5, mult:2, title, wait:'表なら2倍、裏なら失う', winLamp:'表!! 2倍', winCall:cry ? '取り返した!!' : '悪魔に勝った!!', loseLamp:'裏…', loseCall:cry ? '泣きっ面に蜂…' : '悪魔に持っていかれた…'});
+  openChoice({kind:'devil', def:'no', title, sub:'表なら賭けた分が2倍、裏なら賭けた分を失う。確率は50%ずつ。半分(' + half + ')か、全部(' + full + ')か',
+    yes:'半分賭ける', mid:'全部!!', no:'やめとく', onYes(){ go(0.5); }, onMid(){ go(1); }, onNo(auto){ if (!auto) sClick(); }});
   return true;
 }
 // 的中のあと:RUSH中なら「全ツッパで行くか」、そうでなければ「倍プッシュするか」を聞く
@@ -2216,7 +2224,7 @@ function celebrate(res){
     // まず倍率をドンと見せてから、払戻をカウントアップ。数え終わりに「ジャキーン」
     b.textContent = '×' + (Math.round(res.odds * res.mult * 10) / 10); b.classList.add('odds');
     V.payAnim = {from:0, to:res.pay, t0:performance.now() + 480, dur:500 + tr * 250, last:-1, x:true, done(){ payFinale(tr); }};
-    c.textContent = (res.fate ? '運命のレース×2! ' : '') + (res.big ? res.big + '%賭け ' : '') + (res.ride ? '相乗り成功! ' : '') + (res.h2 ? res.h + '→' + res.h2 + ' ' : '') + (res.promoted ? '繰り上がり1着! ' : res.sashi ? 'ゴール前で差し切り! ' : res.photo ? R.cm + 'cm差で勝ち切った! ' : '') + (res.push ? '倍プッシュ' + res.push + '連! ' : '')
+    c.textContent = (res.fate ? '運命のレース×' + res.fate + '! ' : '') + (res.big ? res.big + '%賭け ' : '') + (res.ride ? '相乗り成功! ' : '') + (res.h2 ? res.h + '→' + res.h2 + ' ' : '') + (res.promoted ? '繰り上がり1着! ' : res.sashi ? 'ゴール前で差し切り! ' : res.photo ? R.cm + 'cm差で勝ち切った! ' : '') + (res.push ? '倍プッシュ' + res.push + '連! ' : '')
       + (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.combo ? ' COMBO' : '') + (res.mult > 1 ? ' ボーナス×' + res.mult : '');
     if (res.promoted) setTimeout(() => callout('繰り上がり!!', 'lead'), 300);
     { const n0 = V.n; setTimeout(() => { if (V.n === n0 || (V.n === n0 + 1 && V.ph === 'bet')) if (!richOffer(res)) offerChoice(res); }, res.jp ? 4300 : res.rushIn ? 3300 : 1500); }
@@ -2328,7 +2336,7 @@ function ui(ps, now){
   B.toggle('is-big', S.big);
   const fate = canBetNow() && fateOn();
   B.toggle('is-fate', fate);
-  if (fate && V.fateSeen !== V.n) { V.fateSeen = V.n; callout('運命のレース!!', 'lead'); toast('このレースは、全ツッパで賭けると払戻×2', 'gold'); sChance(); }
+  if (fate && V.fateSeen !== V.n) { V.fateSeen = V.n; callout('運命のレース!!', 'lead'); toast('このレースは、所持の半分以上を賭けると払戻×1.5、全ツッパなら×2', 'gold'); sChance(); }
   B.toggle('is-gold', !!R.gold && !quiet);
   B.toggle('calm', quiet);
   A.fever = S.streak >= 2;
@@ -2383,11 +2391,11 @@ function ui(ps, now){
     if (multi && exHint) text = exHint + '。' + text;
     if (R.gold) text = 'ゴールデンレース(払戻×2)。' + text;
     const stk = stakeNow(), lgNow = myLg(stk);
-    if (fate && !myH) text = '運命のレース:全ツッパなら払戻×2。' + text;
     if (S.big && !(S.push > 0) && !myH) text = bigTier(S.coins) + ' ' + S.bigF + '%:' + fmtS(stk) + 'を賭ける(払戻×' + BIG_MULT[S.bigF] + ')。' + text;
     if (S.push > 0) text = '倍プッシュ' + S.push + '連め:' + fmtS(stakeNow()) + 'を全部乗せ。当たれば×' + pushMult(S.push) + '。' + text;
     if (S.rush > 0) text = 'ドパミンRUSH ' + S.rush + '連中!伝説率' + legendPct(lgNow) + '%。外したら終わり。' + text;
     else if (lgNow >= 15) text = (stk >= S.coins ? '全ツッパ' : '所持の' + Math.round(stk / S.coins * 100) + '%賭け') + 'で伝説率' + legendPct(lgNow) + '%(ふだん' + legendPct(0) + '%)。' + text;
+    if (fate && !myH) text = '運命のレース:半分以上で払戻×1.5、全ツッパで×2。' + text;
   }
   setText($('callText'), text);
   $('call').classList.toggle('gold', !!R.gold);
@@ -2734,6 +2742,7 @@ function start(){
   $('betInOk').addEventListener('click', betInOk);
   $('chYes').addEventListener('click', () => answerChoice(true));
   $('chNo').addEventListener('click', () => answerChoice(false));
+  $('chMid').addEventListener('click', () => answerChoice('mid'));
   $('betInVal').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); betInOk(); } });
   document.querySelectorAll('.betQuick button').forEach(b => b.addEventListener('click', () => betInQuick(b.dataset.q)));
   $('stamps').replaceChildren(...STAMPS.map((s, k) => {

@@ -971,3 +971,11 @@ body.calm.is-fate .chip[data-bet="all"],body.calm.is-fate .chip.bf[data-bf="100"
 #demo small{display:block;margin-top:4px}
 #judge.go ~ #demo{visibility:hidden}
 #demo .demoList[hidden] ~ small{display:none}
+
+/* 二択に3つめのボタンがあるとき(半分 / 全部 / やめる) */
+#choice.three .chB{grid-template-columns:1.25fr 1fr .85fr}
+#choice.three button{font-size:clamp(13px,4vw,18px);padding:4px 4px}
+#chMid{background:linear-gradient(90deg,#5a0a1a,#b14cff);color:#fff!important;border-color:#fff!important}
+#chMid[hidden]{display:none}
+#choice.levy.three .chB{grid-template-columns:1fr 1fr 1.1fr}
+body.is-fate .chip.bf[data-bf="50"]{border-color:#ff5af0;box-shadow:0 0 10px rgba(255,90,240,.8)}
