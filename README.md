@@ -102,6 +102,7 @@ npx esbuild src/net-src.js --bundle --format=iife --global-name=FKNet --minify -
 
 ## 開発メモ
 
+- OGP画像(`og.jpg`)とファビコンは `src/og/` から作り直せます。`python3 src/og/render.py <@fontsourceを入れたnode_modules>` と `python3 src/og/favicon.py`。背景の `scene.jpg` はゲームのレース中の画面をそのまま撮ったものです。
 - 所持コインの上限は9000兆です(これより上は整数を正確に持てないため)。
 - `?demo=puchun` を付けると、伝説・馬主の援助・審議(降着/確定)・写真判定・競走中止・ゴール前で差される・破産を実際のレースの中で出せる確認用モードになります(ひとりで再生し、記録は保存しません)。 所持コインを300万・15億にするボタンもあり、BIG BET をすぐ試せます。
 - `?debug=1` を付けると `window.__fk` から内部状態を触れます(コインは元々自己申告なので、不正対策上の差はありません)。

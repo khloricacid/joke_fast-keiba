@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ファスト競馬 OGP画像のもと(1200×630)</title>
+<!-- render.py がこのページを撮って og.png にする。フォントは npm の @fontsource から(render.py が差し込む) -->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1200px;height:630px;overflow:hidden;background:#0a0e24}
+body{position:relative;font-family:"Dela Gothic One","Noto Sans CJK JP",sans-serif;color:#fff}
+.abs{position:absolute}
+/* ゲームの実際の画面(レース中の3D) */
+.scene{inset:0;background:url(scene.jpg) 0 0/1416px auto no-repeat;filter:saturate(1.25) contrast(1.08)}
+/* 馬のうしろから虹の放射 */
+.rays{inset:-40%;background:repeating-conic-gradient(from 8deg at 66% 46%,#ff2d3d 0 5deg,#ffd60a 5deg 10deg,#3dff8a 10deg 15deg,#2de2ff 15deg 20deg,#b14cff 20deg 25deg,#ff5af0 25deg 30deg);
+  mix-blend-mode:screen;opacity:.6;-webkit-mask:radial-gradient(circle at 66% 46%,transparent 0 13%,#000 34%);mask:radial-gradient(circle at 66% 46%,transparent 0 13%,#000 34%)}
+.shade{inset:0;background:linear-gradient(100deg,rgba(8,6,30,.82) 0%,rgba(8,6,30,.55) 34%,rgba(8,6,30,0) 58%),linear-gradient(0deg,rgba(8,6,30,.7) 0,rgba(8,6,30,0) 26%)}
+.dots{inset:0;background:radial-gradient(circle,rgba(255,255,255,.22) 1.6px,transparent 2px) 0 0/14px 14px;-webkit-mask:linear-gradient(110deg,#000 0,transparent 46%);mask:linear-gradient(110deg,#000 0,transparent 46%)}
+/* スピード線 */
+.speed i{position:absolute;height:5px;border-radius:3px;background:linear-gradient(90deg,transparent,#fff);opacity:.85;transform:rotate(-5deg)}
+/* 題字 */
+.title{left:38px;top:50px;font-size:150px;line-height:1;letter-spacing:-.05em;white-space:nowrap;transform:rotate(-3.5deg);transform-origin:0 100%;
+  color:#ffd60a;-webkit-text-stroke:20px #16130f;paint-order:stroke fill;
+  filter:drop-shadow(9px 9px 0 #ff2d3d) drop-shadow(0 0 26px rgba(255,214,10,.55))}
+.title b{font-weight:400;color:#fff}
+.band{left:-20px;top:268px;padding:8px 34px 10px 66px;font-size:50px;line-height:1.1;white-space:nowrap;background:#ff2d3d;color:#fff;transform:rotate(-5deg);transform-origin:0 50%;
+  box-shadow:8px 8px 0 #16130f;-webkit-text-stroke:5px #16130f;paint-order:stroke fill}
+.band b{font-weight:400;color:#ffd60a;font-size:66px}
+.tag{left:44px;top:356px;font-size:56px;line-height:1;white-space:nowrap;transform:rotate(-5deg);transform-origin:0 50%;
+  background:linear-gradient(90deg,#ff5af0,#ffd60a 45%,#3dff8a 75%,#2de2ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 0 #000) drop-shadow(4px 4px 0 #16130f) drop-shadow(-2px -2px 0 #16130f) drop-shadow(2px -2px 0 #16130f) drop-shadow(-2px 2px 0 #16130f)}
+.hit{left:52px;top:422px;transform:rotate(-5deg);transform-origin:0 50%;white-space:nowrap}
+.hit small{display:block;font-size:34px;color:#fff;-webkit-text-stroke:7px #16130f;paint-order:stroke fill}
+.hit em{display:block;font-style:normal;font-size:92px;line-height:1;color:#ffd60a;letter-spacing:-.02em;-webkit-text-stroke:14px #16130f;paint-order:stroke fill;filter:drop-shadow(6px 6px 0 #ff2d3d)}
+/* シール */
+.burst{right:14px;bottom:62px;width:228px;height:228px;display:grid;place-items:center;text-align:center;transform:rotate(9deg);color:#16130f;
+  background:#ffd60a;clip-path:polygon(50% 0,59% 13%,73% 5%,76% 21%,92% 19%,88% 35%,100% 42%,90% 54%,98% 68%,83% 72%,82% 88%,67% 84%,58% 98%,48% 86%,35% 96%,31% 80%,15% 82%,19% 66%,4% 60%,14% 48%,2% 36%,17% 30%,14% 14%,30% 17%,36% 3%);}
+.burst span{display:block;font-size:22px;line-height:1.15}
+.burst b{display:block;font-weight:400;font-size:41px;line-height:1.1;letter-spacing:-.04em;color:#ff2d3d;-webkit-text-stroke:3px #16130f;paint-order:stroke fill}
+.burstShadow{right:6px;bottom:53px;width:228px;height:228px;transform:rotate(9deg);background:#16130f;clip-path:polygon(50% 0,59% 13%,73% 5%,76% 21%,92% 19%,88% 35%,100% 42%,90% 54%,98% 68%,83% 72%,82% 88%,67% 84%,58% 98%,48% 86%,35% 96%,31% 80%,15% 82%,19% 66%,4% 60%,14% 48%,2% 36%,17% 30%,14% 14%,30% 17%,36% 3%)}
+.rush{left:600px;top:508px;padding:4px 20px 8px;font-size:36px;line-height:1.1;border-radius:6px;border:5px solid #16130f;transform:rotate(-6deg);white-space:nowrap;color:#fff;-webkit-text-stroke:5px #16130f;paint-order:stroke fill;
+  background:linear-gradient(90deg,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,#ff5af0);box-shadow:6px 6px 0 #16130f}
+.big{left:596px;top:520px;padding:4px 20px 8px;font-size:38px;line-height:1.1;border-radius:6px;border:5px solid #ffd60a;transform:rotate(-8deg);white-space:nowrap;color:#ffd60a;background:linear-gradient(135deg,#16130f,#3a2a00);box-shadow:0 0 26px rgba(255,190,0,.9)}
+/* コイン */
+.coin{width:var(--s);height:var(--s);border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff7c2 0 12%,#ffd60a 13% 58%,#e89a00 59% 100%);border:calc(var(--s)*.09) solid #16130f;box-shadow:inset 0 0 0 calc(var(--s)*.1) #ffec7a;transform:rotate(var(--r)) scaleX(var(--sx,1))}
+.coin::after{content:"";position:absolute;inset:30%;border-radius:50%;background:#e89a00;opacity:.55}
+/* 下の帯 */
+.foot{left:0;right:0;bottom:0;height:54px;background:#16130f;border-top:5px solid #ffd60a;display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-family:"Zen Kaku Gothic New","Noto Sans CJK JP",sans-serif;font-weight:900;font-size:25px;white-space:nowrap}
+.foot b{color:#ffd60a;font-weight:900}
+.foot span{font-size:19px;opacity:.85;font-weight:700}
+.frame{inset:0;border:10px solid transparent;border-image:linear-gradient(90deg,#ff2d3d,#ffd60a,#3dff8a,#2de2ff,#b14cff,#ff5af0) 1;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="abs scene"></div>
+<div class="abs rays"></div>
+<div class="abs shade"></div>
+<div class="abs dots"></div>
+<div class="abs speed">
+  <i style="left:300px;top:236px;width:300px"></i><i style="left:420px;top:330px;width:240px;opacity:.6"></i>
+  <i style="left:520px;top:486px;width:210px;opacity:.7"></i><i style="left:880px;top:560px;width:280px;opacity:.5"></i>
+  
+</div>
+<div class="abs coin" style="--s:74px;--r:-18deg;--sx:.8;left:598px;top:196px"></div>
+<div class="abs coin" style="--s:46px;--r:24deg;left:1086px;top:52px"></div>
+<div class="abs coin" style="--s:58px;--r:10deg;--sx:.7;left:524px;top:388px"></div>
+<div class="abs coin" style="--s:38px;--r:-30deg;left:1128px;top:262px"></div>
+<div class="abs coin" style="--s:58px;--r:16deg;--sx:.85;left:900px;top:520px"></div>
+<div class="abs coin" style="--s:34px;--r:0deg;left:468px;top:300px"></div>
+<div class="abs coin" style="--s:44px;--r:-12deg;--sx:.75;left:1120px;top:150px"></div>
+<h1 class="abs title">ファスト<b>競馬</b></h1>
+<p class="abs band">1レース <b>5秒</b> で決着</p>
+<p class="abs tag">脳汁ドッパドパ3D競馬</p>
+<p class="abs hit"><small>万馬券級!!!</small><em>+25,142,330</em></p>
+<p class="abs rush">RUSH 7連</p>
+<div class="abs burstShadow"></div>
+<div class="abs burst"><div><span>最大</span><b>×999.9</b><span>伝説あり</span></div></div>
+<div class="abs foot"><b>URLを送るだけ。みんなで同じレースに賭けられる</b><span>※ジョークサイト／賭けるのはゲーム内コインだけ</span></div>
+<div class="abs frame"></div>
+</body>
+</html>
