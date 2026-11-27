@@ -944,3 +944,30 @@ body.calm .chip.bf[aria-pressed="true"],body.calm .chip.big[aria-pressed="true"]
 .pop{grid-template-columns:minmax(0,1fr)}
 .uma[aria-pressed="true"]:hover,.uma[aria-pressed="true"]:active{background:var(--ink);color:var(--paper)}
 #choice .chS,#choice .chT{white-space:normal;overflow-wrap:anywhere}
+
+/* ================= 超大金持ち(所持1兆〜)への誘い ================= */
+#choice.devil{border-color:#b14cff;box-shadow:0 0 34px rgba(177,76,255,.75),0 8px 30px rgba(0,0,0,.6)}
+#choice.devil .chT{color:#d9b3ff}
+#choice.rank{border-color:#2de2ff;box-shadow:0 0 34px rgba(45,226,255,.7),0 8px 30px rgba(0,0,0,.6)}
+#choice.rank .chT{color:#9af1ff}
+#choice.levy{border-color:#fff;box-shadow:0 0 34px rgba(255,255,255,.6),0 8px 30px rgba(0,0,0,.6)}
+#choice.levy .chT{color:#fff}
+#choice.levy #chYes{background:linear-gradient(90deg,#b14cff,#ff2d3d);color:#fff}
+#choice.levy .chB{grid-template-columns:1fr 1.2fr}
+/* 運命のレース:全ツッパのボタンが呼んでいる */
+body.is-fate .chip[data-bet="all"],body.is-fate .chip.bf[data-bf="100"]{background:linear-gradient(90deg,#b14cff,#ff2d3d);border-color:#fff;color:#fff;box-shadow:0 0 calc(8px + 16px*var(--beat)) rgba(255,90,240,.95);animation:flame .35s ease-in-out infinite alternate}
+body.is-fate .call{background:linear-gradient(90deg,#2a0a4a,#5a0a1a);color:#fff}
+body.calm.is-fate .chip[data-bet="all"],body.calm.is-fate .chip.bf[data-bf="100"]{animation:none;box-shadow:none}
+@media (prefers-reduced-motion:reduce){body.is-fate .chip[data-bet="all"],body.is-fate .chip.bf[data-bf="100"]{animation:none}}
+#demo{max-height:46vh;overflow:auto}
+#judge{grid-template-columns:minmax(0,1fr)}
+#judge b{max-width:100%}
+#judge span{overflow-wrap:anywhere}
+/* 確認用メニュー:ふだんは右上の小さなボタン。開くと一覧 */
+#demo{left:auto;right:8px;top:calc(var(--hud-top) + 6px);transform:none;display:block;padding:6px;max-width:min(92vw,330px);max-height:none;overflow:visible}
+#demo #demoTog{display:block;margin-left:auto;font-size:12px;padding:5px 10px;background:#16130f;color:#ffd60a;border:2px solid #ffd60a;border-radius:8px}
+#demo .demoList{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;max-height:52vh;overflow:auto}
+#demo .demoList[hidden]{display:none}
+#demo small{display:block;margin-top:4px}
+#judge.go ~ #demo{visibility:hidden}
+#demo .demoList[hidden] ~ small{display:none}

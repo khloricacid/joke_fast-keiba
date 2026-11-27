@@ -2,9 +2,26 @@
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const fmt = n => Math.round(n).toLocaleString('ja-JP');
-// 狭い場所用の短い表記(1.2億、345万)
-const fmtS = n => { n = Math.round(n); const u = [[1e16, '京'], [1e12, '兆'], [1e8, '億'], [1e4, '万']].find(x => n >= x[0]); if (!u) return fmt(n); const v = n / u[0]; return (v >= 100 ? Math.floor(v) : Math.floor(v * 10) / 10) + u[1]; };
+// 数の単位(4桁ごと)。無量大数(10の68乗)まで数える。1秭は本来「𥝱」だが、出せない端末が多いので「秭」
+const UNITS = ['', '万', '億', '兆', '京', '垓', '秭', '穣', '溝', '澗', '正', '載', '極', '恒河沙', '阿僧祇', '那由他', '不可思議', '無量大数'];
+const unitVal = i => Number('1e' + i * 4);
+// 4桁ずつの組に分ける(上の位から)。9000兆より上は小数(倍精度)の限界で上から15桁までしか正確に持てないので、そこから下は0で埋める
+function groups4(n){
+  n = Math.floor(Math.max(0, n));
+  let str;
+  if (n < 9e15) str = String(n);
+  else { const me = n.toExponential(14).split('e'), d = me[0].replace('.', ''), len = Number(me[1]) + 1; str = d.length >= len ? d.slice(0, len) : d + '0'.repeat(len - d.length); }
+  str = str.padStart(Math.ceil(str.length / 4) * 4, '0');
+  const g = [];
+  for (let i = 0; i < str.length; i += 4) g.push(Number(str.slice(i, i + 4)));
+  return g.length > UNITS.length ? [9999].concat(new Array(UNITS.length - 1).fill(0)) : g;
+}
+// 1京未満は「12,345」、それより上は「1234無量大数5678不可思議」のように上から2つの単位まで
+const fmt = n => { if (!(n >= 1e16)) return Math.round(n).toLocaleString('ja-JP'); const g = groups4(n), t = g.length - 1; return g[0] + UNITS[t] + (g[1] ? g[1] + UNITS[t - 1] : ''); };
+// 狭い場所用の短い表記(1.2億、345万、12無量大数)
+const fmtS = n => { n = Math.round(n); if (!(n >= 1e4)) return fmt(n); const g = groups4(n), t = g.length - 1, d = Math.floor(g[1] / 1000); return (g[0] >= 100 || !d ? g[0] : g[0] + '.' + d) + UNITS[t]; };
+// 入力欄に入れる書き方(parseBet で読み戻せる形)
+const fmtIn = n => { if (!(n >= 1e16)) return String(Math.floor(n)); const g = groups4(n), t = g.length - 1, d = String(g[1]).padStart(4, '0').replace(/0+$/, ''); return g[0] + (d ? '.' + d : '') + UNITS[t]; };
 // はみ出す文字は、その場で入りきる大きさまで縮める(どんなに桁が増えても画面から見切れない)
 function fitText(el){
   if (!el) return;
@@ -73,10 +90,14 @@ const LEGEND_EF = 12;
 const ODDS_K = 0.912;   // ふつうに賭けたときの払い戻し率がほぼ100%になる値。全ツッパとRUSHでそれ以上に稼げる
 // 馬単(1着→2着)のオッズ:Harville の確率 p1×p2/(1-p1) から K / p^G。15万レースで、どの人気帯の組も払戻率89〜104%(平均96%)に収まる値
 const EX_K = 1.17, EX_G = 0.92;
-const COIN_MAX = 9e15;       // 所持コインの上限(9000兆。これより上は整数を正確に持てない)
+const COIN_MAX = 9.999e71;   // 所持コインの上限(9999無量大数)。9000兆より上は上から15桁ほどが正確で、下の桁は丸められる
+// 超大金持ち:所持1兆から。位(兆=0、京=1 … 無量大数=14)が上がるほど「すべてを賭ける」誘いが増える
+const RICH = 1e12;
+const richRank = c => c >= RICH ? Math.min(14, Math.floor(Math.log10(c) / 4 + 1e-9) - 3) : -1;
 // BIG BET:所持100万コイン以上で解放。賭け金は所持の 25% / 50% / 100% だけ。細かいボーナスの代わりに、割合ごとの倍率1本
 const BIG_MIN = 1e6, BIG_MULT = {25:1.2, 50:1.3, 100:1.5};
-const bigTier = c => c >= 1e9 ? 'GIGA' : c >= 1e8 ? 'MEGA' : 'BIG';
+const SI_TIER = [[1e30, 'QUETTA'], [1e27, 'RONNA'], [1e24, 'YOTTA'], [1e21, 'ZETTA'], [1e18, 'EXA'], [1e15, 'PETA'], [1e12, 'TERA'], [1e9, 'GIGA'], [1e8, 'MEGA']];
+const bigTier = c => { if (c >= 1e32) return UNITS[Math.min(17, Math.floor(Math.log10(c) / 4 + 1e-9))]; const t = SI_TIER.find(x => c >= x[0]); return t ? t[1] : 'BIG'; };
 const GRADE_EF = GRADES.reduce((a, g, i) => a + g.p * (i === 4 ? LEGEND_EF : g.ef), 0);
 const abilityOf = st => st[0] * 0.3 + st[1] * 0.3 + st[2] * 0.1 + st[3] * 0.1 + st[4] * 0.2;
 // 開催条件(空)や騎乗の組み合わせで発動する特性・能力の判定
@@ -151,6 +172,7 @@ function buildRace(seed, force){
   for (const h of hs) sum += h.wOdds;
   for (const h of hs) { h.p = h.wOdds / sum; h.odds = Math.min(99.9, Math.max(1.1, Math.round(ODDS_K / h.p * 10) / 10)); }
   const ex = hs.map(x => hs.map(y => x === y ? 0 : Math.min(999.9, Math.max(1.5, Math.round(EX_K / Math.pow(x.p * y.p / (1 - x.p), EX_G) * 10) / 10))));
+  const fateRoll = rng32((seed ^ 0xfa7e0001) >>> 0)();   // 運命のレースの抽選値(当たりの幅は見る人の所持の位で変わる)
   const fav = hs.slice().sort((a, b) => (b.p - a.p) || (a.no - b.no));
   ['◎','○','▲','△'].forEach((m, i) => { fav[i].mark = m; });
   fav.forEach((h, i) => { h.pop = i + 1; });
@@ -233,7 +255,7 @@ function buildRace(seed, force){
   const midLast = hs.slice().sort((a, b) => prog(a, tMid) - prog(b, tMid))[0].no;
   const margin = gap1 < 0.05 ? 'ハナ差' : gap1 < 0.085 ? 'アタマ差' : gap1 < 0.13 ? 'クビ差' : gap1 < 0.2 ? '半馬身差' : gap1 < 0.29 ? '1馬身差' : '2馬身差';
   const tWin = hs[vis[0] - 1].T, a = tWin - SL_PRE, slowDisp = (SL_PRE + SL_POST) / SL_RATE;
-  return {seed, hs, order, ex, vis, evt, stopNo, inq:evt === 'demote' || evt === 'stand' ? evt : '', cm:Math.max(1, Math.round(gap1 * 300)), margin, gold, sky, notes, midLast, legend:legend ? legend.no : 0, forced:legend && legend.skill.forced ? legend.no : 0, photo:gap1 < 0.05, tWin, a, slowDisp,
+  return {seed, hs, order, ex, fateRoll, vis, evt, stopNo, inq:evt === 'demote' || evt === 'stand' ? evt : '', cm:Math.max(1, Math.round(gap1 * 300)), margin, gold, sky, notes, midLast, legend:legend ? legend.no : 0, forced:legend && legend.skill.forced ? legend.no : 0, photo:gap1 < 0.05, tWin, a, slowDisp,
     tSettle:a + SL_PRE / SL_RATE,                         // 画面上で1着がゴールする時刻
     dur:T + 0.3 + slowDisp - (SL_PRE + SL_POST)};         // 画面上のレース時間
 }
@@ -274,7 +296,7 @@ function adopt(d){
   if (d.st && typeof d.st === 'object') for (const k of Object.keys(d.st).slice(0, 80)) {
     if (!SAFE(k)) continue;
     const v = d.st[k];
-    if (Number.isFinite(v)) S.st[k] = clamp(v, 0, 1e15);
+    if (Number.isFinite(v)) S.st[k] = clamp(v, 0, COIN_MAX);
     else if (v && typeof v === 'object') { const o = {}; for (const kk of Object.keys(v).slice(0, 64)) if (SAFE(kk) && Number.isFinite(v[kk])) o[kk] = clamp(v[kk], 0, 1e9); S.st[k] = o; }
   }
   const dl = d.daily;
@@ -295,14 +317,14 @@ function adopt(d){
   const pd = d.pend;
   if (pd && okInt(pd.n, 1, 1e9) && okInt(pd.s, 0, 4294967295) && okInt(pd.h, 1, 6) && okInt(pd.bet, 1, COIN_MAX) && Number.isFinite(pd.odds) && Number.isFinite(pd.mult))
     S.pend = {n:pd.n, s:pd.s, h:pd.h, bet:pd.bet, odds:clamp(pd.odds, 1, 1000), mult:clamp(pd.mult, 1, 10), quick:!!pd.quick, all:!!pd.all, lg:okInt(pd.lg, 0, 6) ? pd.lg : 0,
-      h2:okInt(pd.h2, 1, 6) && pd.h2 !== pd.h ? pd.h2 : 0, big:[25, 50, 100].includes(pd.big) ? pd.big : 0, ride:!!pd.ride};
+      h2:okInt(pd.h2, 1, 6) && pd.h2 !== pd.h ? pd.h2 : 0, big:[25, 50, 100].includes(pd.big) ? pd.big : 0, ride:!!pd.ride, fate:!!pd.fate};
   if (d.tb && typeof d.tb.d === 'string' && Number.isFinite(d.tb.v)) S.tb = {d:d.tb.d.slice(0, 10), v:clamp(Math.floor(d.tb.v), 0, COIN_MAX)};
   if (Number.isFinite(d.streak)) S.streak = Math.max(0, Math.floor(d.streak));
   if (Number.isFinite(d.best)) S.best = Math.max(S.coins, Math.floor(d.best));
   if (Number.isFinite(d.busts)) S.busts = Math.max(0, Math.floor(d.busts));
 }
 // 演出の確認用モード(?demo=puchun)。ひとりで遊び、記録は保存しない
-const DEMO = /[?&]demo=puchun/.test(window.location.search) ? {legend:false, owner:false} : null;
+const DEMO = /[?&]demo=puchun/.test(window.location.search) ? {legend:false, owner:false, fate:false, offer:'', toss:null} : null;
 function save(){ if (DEMO) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 const streakMult = s => s >= 2 ? 1.5 : s === 1 ? 1.2 : 1;
 const xpNeed = l => 60 * l * (l + 1) / 2;                 // レベル l+1 になるのに必要な累計
@@ -331,7 +353,7 @@ const newSeed = () => (Math.random() * 4294967296) >>> 0;
 // 画面に出す所持コイン。馬主の援助は、演出で手が差し伸べられるまで表示に足さない
 const coinView = () => V.coinShow != null ? V.coinShow : S.coins;
 function myState(){
-  return {pid:PID, fk:7, nick:S.nick, hue:S.hue, coins:coinView(), streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
+  return {pid:PID, fk:8, nick:S.nick, hue:S.hue, coins:coinView(), streak:S.streak, lv:lvOf(S.xp), tb:todayBest(), pz:pauseFor(V.n), pn:V.n,
     pick:me.pick, sit:me.sit, away:me.away, g:me.g, emo:me.emo, win:me.win};
 }
 function pushPresence(){
@@ -344,7 +366,7 @@ function players(now){
   for (const [pid, o] of others) {
     if (now - o.seen > 7000) { others.delete(pid); continue; }
     const s = o.st;
-    if (!s || s.fk !== 7) continue;
+    if (!s || s.fk !== 8) continue;
     out.push({peer:pid, isMe:false, nick:clean(s.nick) || 'ななし',
       hue:Number.isFinite(s.hue) ? ((Math.floor(s.hue) % 360) + 360) % 360 : 0,
       coins:Number.isFinite(s.coins) ? clamp(Math.floor(s.coins), 0, COIN_MAX) : 0,
@@ -446,16 +468,18 @@ function startRace(now){
     if (bet > 0) {
       const P = me.pick, big = P.bg || 0, h2 = P.h2 || 0, gm = R.gold ? 2 : 1, pm = pushMult(S.push);
       let mult;
-      if (big) mult = BIG_MULT[big] * gm * pm;   // BIG:連勝・秒で決断・コンボ・救済くじの倍率は付かない(コンボと救済くじは次の通常の賭けまで持ち越し)
+      const fate = fateOn() && bet >= S.coins, fm = fate ? 2 : 1;   // 運命のレース:全ツッパを選んだ人だけ払戻×2
+      if (big) mult = BIG_MULT[big] * gm * pm * fm;   // BIG:連勝・秒で決断・コンボ・救済くじの倍率は付かない(コンボと救済くじは次の通常の賭けまで持ち越し)
       else {
         const sm = streakMult(S.streak), qm = V.quick ? 1.1 : 1, bm = S.boost || 1;
         let cm = 1;
         // コンボ:満タンで迎えたレースは払戻×1.3。続けて賭けるとたまり、見送るとゼロに戻る
         if (S.combo >= 5) { cm = 1.3; S.combo = 0; V.comboHit = true; } else S.combo++;
         S.boost = 1;
-        mult = sm * qm * gm * cm * bm * pm;
+        mult = sm * qm * gm * cm * bm * pm * fm;
       }
-      V.locked = {h:P.h, h2, big, tier:big ? bigTier(S.coins) : '', ride:!!V.rideNick, bet, odds:h2 ? R.ex[P.h - 1][h2 - 1] : R.hs[P.h - 1].odds, mult:Math.round(mult * 100) / 100,
+      if (fate) inc('fateBets');
+      V.locked = {h:P.h, h2, big, fate, tier:big ? bigTier(S.coins) : '', ride:!!V.rideNick, bet, odds:h2 ? R.ex[P.h - 1][h2 - 1] : R.hs[P.h - 1].odds, mult:Math.round(mult * 100) / 100,
         quick:V.quick && !big, push:S.push, all:bet >= S.coins, frac:bet / S.coins, deadline:V.deadline, lg:P.lg || 0};
       S.coins -= bet;
       if (big) { inc('bigBets'); if (big >= 100) inc('big100Bets'); }
@@ -475,10 +499,10 @@ function startRace(now){
     me.missed++; S.combo = 0; sessRun = 0;
     if (me.missed >= 2 && !me.sit) me.sit = true;
   }
-  S.pend = V.locked ? {n:V.n, s:V.seed, h:V.locked.h, h2:V.locked.h2, big:V.locked.big, ride:V.locked.ride, bet:V.locked.bet, odds:V.locked.odds, mult:V.locked.mult, quick:V.locked.quick, all:V.locked.all, lg:R.forced} : null;
+  S.pend = V.locked ? {n:V.n, s:V.seed, h:V.locked.h, h2:V.locked.h2, fate:V.locked.fate, big:V.locked.big, ride:V.locked.ride, bet:V.locked.bet, odds:V.locked.odds, mult:V.locked.mult, quick:V.locked.quick, all:V.locked.all, lg:R.forced} : null;
   S.cur = {n:V.n + 1, seed:newSeed()};
   save();
-  if (DEMO) { DEMO.legend = false; demoSync(); }
+  if (DEMO) { DEMO.legend = false; DEMO.fate = false; demoSync(); }
   dirty = true;
   castSay(V.locked && V.locked.big ? V.locked.tier + ' BET、スタートしました!' : 'スタートしました!', true);
   kick3D(1);
@@ -508,12 +532,13 @@ function settle(forced){
     for (const k of ['dnf', 'demoted', 'promoted', 'nosed', 'sashi']) if (ev[k]) inc(k + 'N');
     inc('races');
     if (ev.win) {
-      const pay = Math.floor(L.bet * L.odds * L.mult), m = pay / L.bet;
+      const pay = Math.min(COIN_MAX, Math.floor(L.bet * L.odds * L.mult)), m = L.odds * L.mult;
       const tier = m >= 30 ? 4 : m >= 10 ? 3 : m >= 5 ? 2 : 1;
       S.coins = Math.min(COIN_MAX, S.coins + pay); S.streak++;
       ev.pay = pay; ev.tier = tier; ev.streak = S.streak;
       res = {type:'win', pay, odds:L.odds, mult:L.mult, tier, combo:V.comboHit, h:L.h, h2:L.h2, big:L.big, bigTier:L.tier, ride:L.ride, promoted:ev.promoted, sashi:ev.sashi, photo:R.photo};
       if (L.big) { inc('bigWins'); st.bigBestPay = Math.max(st.bigBestPay || 0, pay); }
+      if (L.fate) { inc('fateWins'); res.fate = true; }
       if (L.h2) { inc('exWins'); st.exBest = Math.max(st.exBest || 0, L.odds); }
       if (L.ride) inc('rideWins');
       // 倍プッシュ:的中したらいったん元の賭け金に戻す。続けるかどうかは、このあとのカウントダウンで選ぶ
@@ -554,6 +579,7 @@ function settle(forced){
       if (S.coins <= 0) {
         S.coins = 1000; S.busts++; res.bust = true; ev.bust = true; st.bustFlag = 1;
         if (L.big) inc('bigBusts');
+        if (L.fate) inc('fateBusts');
         if (!forced && (DEMO ? DEMO.owner : Math.random() < 0.1)) {
           if (DEMO) { DEMO.owner = false; demoSync(); }
           const gift = 50000;   // いくら賭けていても一律5万
@@ -564,9 +590,18 @@ function settle(forced){
       }
       else if (!forced && Math.random() < 0.4) res.lucky = rollLucky(L.bet);
     }
-    res.cross = [1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12].filter(x => before < x && S.coins >= x).pop() || 0;
+    res.cross = MILES.filter(x => before < x && S.coins >= x).pop() || 0;
+    // 超大金持ち(所持1兆〜)への誘い。出るかどうかはここで決めて、実際に聞くのは結果を見せたあと
+    const rk = richRank(S.coins);
+    if (!forced && rk >= 0 && !res.bust) {
+      if (DEMO && DEMO.offer) { res.offer = DEMO.offer; DEMO.offer = ''; }
+      else if (res.type === 'win' && res.cross >= RICH && S.coins * 1e4 <= COIN_MAX) res.offer = 'rank';          // 位が上がった瞬間:位上げ勝負
+      else if (Math.random() < 0.01 + 0.005 * rk) res.offer = 'levy';                                                // まれに:天の取り立て
+      else if (res.type === 'win' && Math.random() < 0.15 + 0.02 * rk) res.offer = 'devil';                         // 的中のあと:悪魔のコイントス
+      else if (res.type === 'lose' && res.big && Math.random() < 0.3) res.offer = 'cry';                            // 大きく負けたあと:泣きの一回
+    }
     // 所持が100万を割ったら、BIGモードは自動で終わる(倍プッシュ中の賭け金はそのまま通常の賭けとして続く)
-    if (S.big && S.coins < BIG_MIN) { S.big = false; S.ex = false; S.bigBack = null; res.bigOut = true; }
+    if (S.big && S.coins < BIG_MIN) { res.bigOut = true; fixBig(); }
     S.best = Math.max(S.best, S.coins);
     S.pend = null;
     // 馬主の援助のときは、実績やミッションの通知も手が差し伸べられてから(先に出ると演出がばれる)
@@ -797,6 +832,85 @@ function choiceFrame(now){
   const sec = Math.ceil(left / 1000);
   if (sec !== C.sec) { C.sec = sec; setText($('chSec'), String(sec)); if (sec <= 3) { sTick(0.2 + (3 - sec) * 0.3); sHeart(); } }
 }
+// ===== 超大金持ち(所持1兆〜)への「すべてを賭ける」誘い =====
+// 主役は自分で選ぶ勝負(悪魔のコイントス、泣きの一回、位上げ勝負、運命のレース)。確率はその場に出し、選ばない・時間切れなら何も起きない。
+// 向こうから取りに来るのは「天の取り立て」だけで、まれにしか出ず、2割を納めれば済む(勝負に出るかは自分で選ぶ)。
+const canBetNow = () => V.ph === 'bet' && !V.late;
+const fateOn = () => { const r = richRank(S.coins); return r >= 0 && !!V.race && ((DEMO && DEMO.fate) || V.race.fateRoll < 0.1 + 0.02 * r); };
+// 画面の上に出す大きな札(審議の札と同じもの)
+function bigSign(lamp, text, cls, ms){
+  const el = $('judge'); V.stampId = (V.stampId || 0) + 1; const id = V.stampId;
+  setText($('jgLamp'), lamp); setText($('jgText'), text);
+  el.className = ''; void el.offsetWidth; el.className = 'go ' + cls + (calm() ? ' calm' : '');
+  fitText($('jgLamp'));
+  setTimeout(() => { if (V.stampId === id && !V.judge) { el.className = ''; $('jgLamp').style.fontSize = ''; } }, ms);
+}
+function fixBig(){ if (S.big && S.coins < BIG_MIN) { S.big = false; S.ex = false; S.bigBack = null; } }
+// 全部か、何倍か。結果は選んだ瞬間に決めて保存する(演出の途中で閉じても変わらない)。画面の所持コインは札が返るまで動かさない
+function allOrNothing(o){
+  const before = S.coins, win = DEMO && DEMO.toss != null ? DEMO.toss : Math.random() < o.p;
+  V.coinShow = before;
+  if (win) { S.coins = Math.min(COIN_MAX, before * o.mult); inc(o.kind + 'Wins'); }
+  else {
+    S.st.maxMelt = Math.max(S.st.maxMelt || 0, before); inc(o.kind + 'Losses');
+    S.coins = 1000; S.busts++; S.st.bustFlag = 1; S.rush = 0; S.streak = 0; endStakeMode();
+  }
+  fixBig(); save();
+  bigSign(o.title, o.wait, 'inq', 1700);
+  sRumble(1.3); sHeart(); setTimeout(sHeart, 450); setTimeout(sHeart, 850); buzz([60, 300, 60, 300, 60]);
+  setTimeout(() => {
+    V.coinShow = null; dirty = true;
+    if (win) {
+      bigSign(o.winLamp, fmt(before) + ' → ' + fmt(S.coins), 'ok', 2600);
+      callout(o.winCall, 'lead'); sWin(4); sHorn(); buzz([40, 30, 40, 30, 200]);
+      if (!calm()) { flash('rainbow'); shake(true); coinRain(160); confetti(200); starBurst(0.5, 0.4, 30, 50); }
+    } else {
+      bigSign(o.loseLamp, fmt(before) + 'コインを失った。おこづかい +1,000', 'ng', 3200);
+      document.body.classList.add('lost');
+      callout(o.loseCall, 'down'); sBust(); sMelt(); buzz([200, 80, 400]); shake(true); ticketRain(140);
+      if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.15, A.ctx.currentTime, 0.1);
+      setTimeout(() => { document.body.classList.remove('lost'); if (A.ctx && S.bgm) A.music.gain.setTargetAtTime(0.55, A.ctx.currentTime, 0.3); }, 3200);
+    }
+    repick(); checkAch({type:'rich'}); save(); tick();
+  }, 1500);
+}
+// 天の取り立て:2割を納める(時間切れもこちら)
+function levyPay(){
+  const pay = Math.floor(S.coins * 0.2);
+  S.coins -= pay; inc('levyPaid'); fixBig(); repick();
+  bigSign('奉納', '−' + fmt(pay) + 'コイン', 'ng', 2200);
+  toast('天に ' + fmtS(pay) + ' を納めた', ''); sMelt(); buzz(120);
+  checkAch({type:'rich'}); save(); tick();
+}
+function richOffer(res){
+  const k = res.offer;
+  if (!k || S.coins < RICH) return false;
+  const blocked = !!V.choice || modalOpen || (me.pick && me.pick.n === V.n && V.ph === 'bet');
+  if (k === 'levy') {
+    if (blocked) { levyPay(); return true; }   // もう次に賭けている人は、納めるほうで済ませる
+    openChoice({kind:'levy', def:'no', title:'天の取り立て', sub:'持ちすぎです。所持の2割(' + fmtS(S.coins * 0.2) + ')を納めるか、天と勝負するか。勝負は60%でおとがめなし、40%で全部没収',
+      yes:'勝負だ!!', no:'2割 納める',
+      onYes(){ allOrNothing({kind:'levy', p:0.6, mult:1, title:'天との勝負', wait:'60%でおとがめなし、40%で全部没収', winLamp:'おとがめなし', winCall:'天に勝った!!', loseLamp:'全部没収', loseCall:'天罰…'}); },
+      onNo(){ levyPay(); }});
+    return true;
+  }
+  if (blocked) return false;
+  if (k === 'rank') {
+    const nx = UNITS[Math.min(17, richRank(S.coins) + 4)];
+    openChoice({kind:'rank', def:'no', title:'位上げ勝負', sub:'当たれば所持コインが1万倍(' + nx + 'の位へ)、外れれば全部失う。当たる確率は10%',
+      yes:'勝負!!', no:'やめとく',
+      onYes(){ allOrNothing({kind:'rank', p:0.1, mult:1e4, title:'位上げ勝負', wait:'10%で1万倍、90%で全部失う', winLamp:'飛び級!!', winCall:nx + 'の位へ!!', loseLamp:'全部失った', loseCall:'身の程を知った…'}); },
+      onNo(auto){ if (!auto) sClick(); }});
+    return true;
+  }
+  const cry = k === 'cry';
+  openChoice({kind:'devil', def:'no', title:cry ? '泣きの一回' : '悪魔のコイントス',
+    sub:(cry ? '残りの ' + fmtS(S.coins) + ' を全部賭けるコイントス。' : '') + '表なら所持コインが2倍(' + fmtS(Math.min(COIN_MAX, S.coins * 2)) + ')、裏なら全部失う。確率は50%ずつ',
+    yes:cry ? '取り返す!!' : '投げる!!', no:'やめとく',
+    onYes(){ allOrNothing({kind:cry ? 'cry' : 'devil', p:0.5, mult:2, title:cry ? '泣きの一回' : '悪魔のコイントス', wait:'表なら2倍、裏なら全部失う', winLamp:'表!! 2倍', winCall:cry ? '取り返した!!' : '悪魔に勝った!!', loseLamp:'裏… 全部失った', loseCall:cry ? '泣きっ面に蜂…' : '悪魔に持っていかれた…'}); },
+    onNo(auto){ if (!auto) sClick(); }});
+  return true;
+}
 // 的中のあと:RUSH中なら「全ツッパで行くか」、そうでなければ「倍プッシュするか」を聞く
 function offerChoice(res){
   if (V.choice || S.coins <= 0 || modalOpen) return;
@@ -838,7 +952,7 @@ const MIN_BET_RATE = 0.1, BET_MULT = [1, 2, 5, 10];
 function minBet(){
   const x = S.coins * MIN_BET_RATE;
   let m = 1000;
-  for (let p = 1000; m < x && p <= 1e15; p *= 10) for (const k of [1, 2, 5]) { m = k * p; if (m >= x) break; }
+  for (let e = 3; m < x && e <= 72; e++) for (const k of [1, 2, 5]) { m = Number(k + 'e' + e); if (m >= x) break; }
   return Math.max(1, Math.min(m, S.coins));
 }
 // いまの設定での賭け金(所持コインで頭打ちにする前)
@@ -904,18 +1018,19 @@ function commitPick(no, no2, ride){
   tick();
 }
 const betLabel = n => n >= 10000 ? fmtS(n) : fmt(n);
-// 「3万」「1.5億」「３００００」「30,000」などを数に
+// 「3万」「1.5億」「2無量大数」「３００００」「30,000」などを数に
+const PARSE_RE = new RegExp('^(\\d+(?:\\.\\d+)?)(' + UNITS.slice(1).sort((a, b) => b.length - a.length).join('|') + ')?$');
 function parseBet(t){
   t = String(t).normalize('NFKC').replace(/[,\s円コイン]/g, '');
-  const m = t.match(/^(\d+(?:\.\d+)?)(万|億|兆)?$/);
+  const m = t.match(PARSE_RE);
   if (!m) return NaN;
-  return Math.floor(Number(m[1]) * ({万:1e4, 億:1e8, 兆:1e12}[m[2]] || 1));
+  return Math.floor(Number(m[1]) * (m[2] ? unitVal(UNITS.indexOf(m[2])) : 1));
 }
 function openBetIn(){
   audioUnlock(); sClick();
   const inp = $('betInVal');
   setText($('betInHave'), '所持 ' + fmt(S.coins) + 'コイン。いまの最低は ' + fmt(minBet()) + 'コイン(「3万」のような書き方もOK)');
-  inp.value = S.bet === 'all' ? '' : String(betNum());
+  inp.value = S.bet === 'all' ? '' : fmtIn(betNum());
   setText($('betInErr'), '');
   openModal('betIn');
   setTimeout(() => { inp.focus(); inp.select(); }, 30);
@@ -923,7 +1038,7 @@ function openBetIn(){
 function betInQuick(q){
   const inp = $('betInVal'), cur = parseBet(inp.value) || betNum();
   const v = q === 'half' ? Math.max(minBet(), Math.floor(cur / 2)) : q === 'x2' ? cur * 2 : q === 'x10' ? cur * 10 : S.coins;
-  inp.value = String(clamp(Math.floor(v), 1, COIN_MAX)); setText($('betInErr'), ''); sClick();
+  inp.value = fmtIn(clamp(Math.floor(v), 1, COIN_MAX)); setText($('betInErr'), ''); sClick();
 }
 function betInOk(){
   const v = parseBet($('betInVal').value);
@@ -2078,7 +2193,10 @@ function renderBoard(prov){
   elBoard.hidden = false;
 }
 // 払戻の倍率で演出が4段階に変わる
+// 大台:1兆までは10倍ごと、そこから上は単位が変わるごと(1京、1垓 … 1無量大数)
+const MILES = [1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12].concat(UNITS.slice(4).map((u, i) => unitVal(i + 4)));
 const CROSS = {1e4:'1万', 1e5:'10万', 1e6:'100万', 1e7:'1,000万', 1e8:'1億', 1e9:'10億', 1e10:'100億', 1e11:'1,000億', 1e12:'1兆'};
+UNITS.slice(4).forEach((u, i) => { CROSS[unitVal(i + 4)] = '1' + u; });
 const CROSS_L = CROSS;
 function celebrate(res){
   const a = $('popA'), b = $('popB'), c = $('popC');
@@ -2098,10 +2216,10 @@ function celebrate(res){
     // まず倍率をドンと見せてから、払戻をカウントアップ。数え終わりに「ジャキーン」
     b.textContent = '×' + (Math.round(res.odds * res.mult * 10) / 10); b.classList.add('odds');
     V.payAnim = {from:0, to:res.pay, t0:performance.now() + 480, dur:500 + tr * 250, last:-1, x:true, done(){ payFinale(tr); }};
-    c.textContent = (res.big ? res.big + '%賭け ' : '') + (res.ride ? '相乗り成功! ' : '') + (res.h2 ? res.h + '→' + res.h2 + ' ' : '') + (res.promoted ? '繰り上がり1着! ' : res.sashi ? 'ゴール前で差し切り! ' : res.photo ? R.cm + 'cm差で勝ち切った! ' : '') + (res.push ? '倍プッシュ' + res.push + '連! ' : '')
+    c.textContent = (res.fate ? '運命のレース×2! ' : '') + (res.big ? res.big + '%賭け ' : '') + (res.ride ? '相乗り成功! ' : '') + (res.h2 ? res.h + '→' + res.h2 + ' ' : '') + (res.promoted ? '繰り上がり1着! ' : res.sashi ? 'ゴール前で差し切り! ' : res.photo ? R.cm + 'cm差で勝ち切った! ' : '') + (res.push ? '倍プッシュ' + res.push + '連! ' : '')
       + (S.streak >= 2 ? S.streak + '連勝!' : '') + (res.combo ? ' COMBO' : '') + (res.mult > 1 ? ' ボーナス×' + res.mult : '');
     if (res.promoted) setTimeout(() => callout('繰り上がり!!', 'lead'), 300);
-    { const n0 = V.n; setTimeout(() => { if (V.n === n0 || (V.n === n0 + 1 && V.ph === 'bet')) offerChoice(res); }, res.jp ? 4300 : res.rushIn ? 3300 : 1500); }
+    { const n0 = V.n; setTimeout(() => { if (V.n === n0 || (V.n === n0 + 1 && V.ph === 'bet')) if (!richOffer(res)) offerChoice(res); }, res.jp ? 4300 : res.rushIn ? 3300 : 1500); }
     cls += ' t' + tr + (unlocked(7) ? ' rb' : '');
     if (!calm()) V.hitStop = performance.now() + 70 + tr * 45;   // ヒットストップ:当たった瞬間の絵を一瞬止めて、手ごたえを出す
     flash(tr >= 3 ? 'rainbow' : 'gold'); shake(tr >= 3); burst = 1;
@@ -2122,7 +2240,7 @@ function celebrate(res){
     else if (res.rush) setTimeout(() => { callout('RUSH ' + res.rush + '連チャン!!', 'lead'); sLevel(); buzz([40, 30, 40, 30, 120]); }, res.jp ? 3600 : 2000);
     if (res.jp) setTimeout(() => {
       a.textContent = 'JACKPOT!!'; elPop.className = 'pop show t4 jp';
-      b.classList.remove('odds'); V.payAnim = {from:res.pay, to:res.pay + res.jp, t0:performance.now(), dur:1600, last:-1, done(){ payFinale(4); }}; fitPop();
+      b.classList.remove('odds'); V.payAnim = {from:res.pay, to:Math.min(COIN_MAX, res.pay + res.jp), t0:performance.now(), dur:1600, last:-1, done(){ payFinale(4); }}; fitPop();
       flash('rainbow'); shake(true); burst = 1; coinRain(220); confetti(300); sHorn(); setTimeout(sHorn, 700);
       for (let i = 0; i < 14; i++) setTimeout(() => firework(0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.35, Math.random() * 360, 90), i * 140);
       buzz([100, 50, 100, 50, 100, 50, 400]); toast('ジャックポット +' + fmt(res.jp) + 'コイン', 'gold'); checkAch({type:'jackpot'});
@@ -2145,6 +2263,7 @@ function celebrate(res){
     if (res.rushEnd) { c.textContent = 'RUSH終了… ' + res.rushEnd + '連で転落'; setTimeout(() => callout('RUSH終了…', 'down'), 400); }
     else if (res.pushEnd) { c.textContent = '倍プッシュ失敗… ' + res.pushEnd + '連が全部消えた'; setTimeout(() => callout('倍プッシュ失敗…', 'down'), 400); }
     flash(''); document.body.classList.add('lost'); sLose();
+    if (res.offer) { const n0 = V.n; setTimeout(() => { if (V.n === n0 || (V.n === n0 + 1 && V.ph === 'bet')) richOffer(res); }, 1700); }
     // 大きく失ったときは、数字が溶けて馬券が舞う
     if (res.big || res.pushEnd || res.rushEnd || res.demoted) { b.classList.add('melt'); sMelt(); shake(false); ticketRain(res.pushEnd || res.rushEnd ? 80 : 40); buzz([120, 60, 200]); }
     // 大穴が来ていたら「もし賭けていれば」
@@ -2153,7 +2272,7 @@ function celebrate(res){
     if (res.lucky) setTimeout(() => showLucky(res.lucky), 900);
   }
   if (res.type === 'win' && !res.cross) {
-    const next = [1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12].find(x => x > S.coins);
+    const next = MILES.find(x => x > S.coins);
     if (next && S.coins >= next * 0.7) setTimeout(() => { if (V.res === res) toast('大台の' + CROSS_L[next] + 'まで あと' + fmt(next - S.coins), 'gold'); }, 2300);
   }
   if (res.bigOut) setTimeout(() => { toast('所持が100万を割った。BIG BET 終了', ''); }, 1800);
@@ -2207,6 +2326,9 @@ function ui(ps, now){
   { const rb = $('rush'); rb.hidden = !(S.rush > 0); setText(rb, 'RUSH ' + S.rush + '連'); }
   { const bt = $('bigTag'); bt.hidden = !S.big; setText(bt, bigTier(S.coins) + ' ×' + BIG_MULT[S.bigF]); }
   B.toggle('is-big', S.big);
+  const fate = canBetNow() && fateOn();
+  B.toggle('is-fate', fate);
+  if (fate && V.fateSeen !== V.n) { V.fateSeen = V.n; callout('運命のレース!!', 'lead'); toast('このレースは、全ツッパで賭けると払戻×2', 'gold'); sChance(); }
   B.toggle('is-gold', !!R.gold && !quiet);
   B.toggle('calm', quiet);
   A.fever = S.streak >= 2;
@@ -2261,6 +2383,7 @@ function ui(ps, now){
     if (multi && exHint) text = exHint + '。' + text;
     if (R.gold) text = 'ゴールデンレース(払戻×2)。' + text;
     const stk = stakeNow(), lgNow = myLg(stk);
+    if (fate && !myH) text = '運命のレース:全ツッパなら払戻×2。' + text;
     if (S.big && !(S.push > 0) && !myH) text = bigTier(S.coins) + ' ' + S.bigF + '%:' + fmtS(stk) + 'を賭ける(払戻×' + BIG_MULT[S.bigF] + ')。' + text;
     if (S.push > 0) text = '倍プッシュ' + S.push + '連め:' + fmtS(stakeNow()) + 'を全部乗せ。当たれば×' + pushMult(S.push) + '。' + text;
     if (S.rush > 0) text = 'ドパミンRUSH ' + S.rush + '連中!伝説率' + legendPct(lgNow) + '%。外したら終わり。' + text;
@@ -2459,7 +2582,7 @@ function renderStats(){
   const rows = [['出走', fmt(st.races || 0) + 'レース'], ['的中', fmt(st.wins || 0) + '回(' + (st.races ? ((st.wins || 0) / st.races * 100).toFixed(1) : '0.0') + '%)'],
     ['最高払戻', fmt(st.bestPay || 0) + 'コイン'], ['払戻の合計', fmt(st.totalPay || 0) + 'コイン'], ['最高所持', fmt(S.best) + 'コイン'],
     ['最長連勝', (st.maxStreak || 0) + '連勝'], ['最長連敗', (st.maxLose || 0) + '連敗'], ['破産', S.busts + '回'], ['ジャックポット', (st.jackpots || 0) + '回'],
-    ['確定演出', (st.omens || 0) + '回'], ['馬主の援助', (st.rescues || 0) + '回'], ['RUSH最高', (st.bestRush || 0) + '連'], ['BIG BET', (st.bigWins || 0) + '勝 / ' + (st.bigBets || 0) + '回'], ['馬単的中', (st.exWins || 0) + '回' + (st.exBest ? '(最高' + st.exBest + '倍)' : '')], ['最大溶かし額', fmtS(st.maxMelt || 0)], ['相乗り的中', (st.rideWins || 0) + '回'], ['倍プッシュ最高', (st.bestPush || 0) + '連'], ['降着', (st.demotedN || 0) + '回'], ['競走中止', (st.dnfN || 0) + '回'], ['推し馬', th && DATA && DATA.horses[th[0]] ? DATA.horses[th[0]].name + '(' + th[1] + '勝)' : '-'], ['相棒の騎手', tj ? tj[0] + '(' + tj[1] + '勝)' : '-'],
+    ['確定演出', (st.omens || 0) + '回'], ['馬主の援助', (st.rescues || 0) + '回'], ['RUSH最高', (st.bestRush || 0) + '連'], ['BIG BET', (st.bigWins || 0) + '勝 / ' + (st.bigBets || 0) + '回'], ['馬単的中', (st.exWins || 0) + '回' + (st.exBest ? '(最高' + st.exBest + '倍)' : '')], ['最大溶かし額', fmtS(st.maxMelt || 0)], ['コイントス', ((st.devilWins || 0) + (st.cryWins || 0)) + '勝 ' + ((st.devilLosses || 0) + (st.cryLosses || 0)) + '敗'], ['位上げ勝負', (st.rankWins || 0) + '勝 ' + (st.rankLosses || 0) + '敗'], ['運命のレース', (st.fateWins || 0) + '勝 / ' + (st.fateBets || 0) + '回'], ['相乗り的中', (st.rideWins || 0) + '回'], ['倍プッシュ最高', (st.bestPush || 0) + '連'], ['降着', (st.demotedN || 0) + '回'], ['競走中止', (st.dnfN || 0) + '回'], ['推し馬', th && DATA && DATA.horses[th[0]] ? DATA.horses[th[0]].name + '(' + th[1] + '勝)' : '-'], ['相棒の騎手', tj ? tj[0] + '(' + tj[1] + '勝)' : '-'],
     ['ヤジ', fmt(st.stamps || 0) + '回']];
   $('p-rec').innerHTML = '<p class="lead">Lv.' + lv + ' ' + esc(titleOf(lv)) + '</p><dl class="kvs">' + rows.map(r => '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>').join('') + '</dl>' +
     '<h3>レベルで解放</h3><ul class="unl">' + ACHD.unlocks.map(u => '<li class="' + (lv >= u.lv ? 'on' : '') + '"><span>Lv.' + u.lv + '</span>' + esc(u.name) + (lv >= u.lv ? '<b>解放済み</b>' : '') + '</li>').join('') + '</ul>' +
@@ -2483,7 +2606,7 @@ function resolvePending(){
   const P = S.pend;
   if (!P) return;
   V.n = P.n; V.seed = P.s; V.race = buildRace(P.s, P.lg || 0); V.ph = 'run';
-  V.locked = {h:P.h, h2:P.h2 || 0, big:P.big || 0, tier:P.big ? bigTier(S.coins + P.bet) : '', ride:!!P.ride, bet:P.bet, odds:P.odds, mult:P.mult, quick:P.quick, all:P.all, frac:P.bet / (S.coins + P.bet), deadline:false};
+  V.locked = {h:P.h, h2:P.h2 || 0, fate:!!P.fate, big:P.big || 0, tier:P.big ? bigTier(S.coins + P.bet) : '', ride:!!P.ride, bet:P.bet, odds:P.odds, mult:P.mult, quick:P.quick, all:P.all, frac:P.bet / (S.coins + P.bet), deadline:false};
   V.omen = false; V.comboHit = false;
   settle(true);
   const r = V.res;
@@ -2526,7 +2649,7 @@ function frame(){
   const bq = Math.round(beat * 5);
   if (bq !== beatShown) { beatShown = bq; document.documentElement.style.setProperty('--beat', (bq / 5).toFixed(1)); }
   const coinTo = coinView();
-  if (Math.abs(coinTo - shownCoins) > 0.5) shownCoins += (coinTo - shownCoins) * 0.14; else shownCoins = coinTo;
+  if (Math.abs(coinTo - shownCoins) > Math.max(0.5, Math.abs(coinTo) * 1e-9)) shownCoins += (coinTo - shownCoins) * 0.14; else shownCoins = coinTo;
   setFit(elCoins, fmt(shownCoins));
   choiceFrame(now);
   requestAnimationFrame(frame);
@@ -2662,12 +2785,17 @@ if (/[?&]debug=1/.test(window.location.search)) window.__fk = {get G(){ return G
 // 演出の確認用パネル。実際のレースの中で、発動タイミングも含めてプチュンを見られる
 function demoSync(){
   const box = $('demo'); if (!box) return;
-  box.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(!!DEMO[b.dataset.k])));
+  box.querySelectorAll('button[data-k]').forEach(b => b.setAttribute('aria-pressed', String(!!DEMO[b.dataset.k])));
   setText(box.querySelector('small'), DEMO.legend ? '好きな馬をタップ → その馬が伝説になって勝ちます' : DEMO.owner ? '最下位の馬に全ツッパしました。負けたら馬主が来ます' : '確認用モード:記録は保存されません');
 }
 function demoPanel(){
+  // ふだんは小さなボタン1つ。押すと一覧が開き、どれかを選ぶと閉じる(演出のじゃまをしない)
   const box = document.createElement('div'); box.id = 'demo';
-  const mk = (k, label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = label; b.addEventListener('click', () => { audioUnlock(); fn(); demoSync(); tick(); }); box.appendChild(b); };
+  const tog = document.createElement('button'); tog.type = 'button'; tog.id = 'demoTog'; tog.textContent = '確認用メニュー ▾'; tog.setAttribute('aria-expanded', 'false');
+  const list = document.createElement('div'); list.className = 'demoList'; list.hidden = true;
+  tog.addEventListener('click', () => { list.hidden = !list.hidden; tog.setAttribute('aria-expanded', String(!list.hidden)); });
+  box.append(tog, list);
+  const mk = (k, label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = label; b.addEventListener('click', () => { audioUnlock(); list.hidden = true; tog.setAttribute('aria-expanded', 'false'); fn(); demoSync(); tick(); }); list.appendChild(b); };
   const ready = () => { if (V.ph === 'bet' && !V.late) return true; toast('レースの合間(馬を選べるとき)に押してね', ''); return false; };
   mk('legend', '▶ 伝説を出す', () => {
     if (!ready()) return;
@@ -2697,6 +2825,14 @@ function demoPanel(){
   };
   mk('m1', '▶ 所持を300万に', () => { S.coins = 3e6; shownCoins = 3e6; });
   mk('m2', '▶ 所持を15億に', () => { S.coins = 1.5e9; shownCoins = 1.5e9; });
+  mk('m3', '▶ 所持を3京に', () => { S.coins = 3e16; shownCoins = 3e16; });
+  mk('m4', '▶ 所持を12無量大数に', () => { S.coins = 1.2e69; shownCoins = 1.2e69; });
+  mk('fate', '▶ 運命のレース', () => { if (S.coins < RICH) { S.coins = 3e16; shownCoins = 3e16; } DEMO.fate = true; V.fateSeen = 0; });
+  const offer = k => { if (S.coins < RICH) { S.coins = 3e16; shownCoins = 3e16; } if (V.choice) closeChoice(false); richOffer({offer:k}); };
+  mk('o1', '▶ 悪魔のコイントス', () => offer('devil'));
+  mk('o2', '▶ 泣きの一回', () => offer('cry'));
+  mk('o3', '▶ 位上げ勝負', () => offer('rank'));
+  mk('o4', '▶ 天の取り立て', () => offer('levy'));
   mk('e1', '▶ 審議→降着', () => race('demote'));
   mk('e2', '▶ 審議→確定', () => race('stand'));
   mk('e3', '▶ 写真判定', () => race('photo'));
